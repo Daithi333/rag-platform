@@ -12,7 +12,7 @@ setup_logging()
 
 app = FastAPI(
     title="RAG Platform API",
-    description="RAG capabilities",
+    description="Public Data Source Ingestion and RAG querying platform",
     version=os.getenv("APP_VERSION", "0.1.0"),
 )
 
@@ -26,7 +26,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     """Handle unhandled exceptions and return json response. Logging handled in middleware."""
     return JSONResponse(
         status_code=500,
-        content={"error": "InternalServerError", "detail": "An unexpected error occurred"},
+        content={
+            "error": "InternalServerError",
+            "detail": "An unexpected error occurred",
+        },
     )
 
 

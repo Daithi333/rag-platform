@@ -41,8 +41,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             duration_ms = round((time.time() - start_time) * 1000, 2)
 
             if status_code >= 500:
-                logger.error("request", status_code=status_code, duration_ms=duration_ms)
+                logger.error(
+                    "request", status_code=status_code, duration_ms=duration_ms
+                )
             elif status_code >= 400:
-                logger.warning("request", status_code=status_code, duration_ms=duration_ms)
+                logger.warning(
+                    "request", status_code=status_code, duration_ms=duration_ms
+                )
             else:
                 logger.info("request", status_code=status_code, duration_ms=duration_ms)

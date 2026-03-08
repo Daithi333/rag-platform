@@ -67,4 +67,7 @@ def test_unhandled_exception_returns_json(client, app_with_error_route):
 
     data = response.json()
 
-    assert data == {"error": "InternalServerError", "detail": "An unexpected error occurred"}
+    assert data == {
+        "error": "InternalServerError",
+        "detail": "An unexpected error occurred",
+    }
