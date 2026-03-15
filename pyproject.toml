@@ -14,6 +14,7 @@ dependencies = [
     "python-dateutil>=2.9.0.post0",
     "sqlalchemy>=2.0.48",
     "structlog>=25.5.0",
+    "tenacity>=9.1.4",
     "uvicorn>=0.41.0",
 ]
 
@@ -36,3 +37,8 @@ addopts = [
     "--strict-markers",
     "--tb=short",
 ]
+
+[tool.mypy]
+explicit_package_bases = true
+ignore_errors = true
+exclude = ["airflow/", "notebooks/"]

@@ -1,5 +1,25 @@
+x-airflow-common: &airflow-common
+  build:
+    context: ./airflow
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  environment:
+    - AIRFLOW_HOME=/opt/airflow
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/airflow_db
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - POSTGRES__DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/rag_db
+    - OPENSEARCH__HOST=http://opensearch:9200
+    - REDIS__HOST=redis
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - airflow_logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./src:/opt/airflow/src
+  networks:
+    - rag-platform-network
+
 services:
-  # API service
   api:
     build: .
     container_name: rag-platform-api
@@ -15,6 +35,90 @@ services:
       - .env
     networks:
       - rag-platform-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-platform-postgres
+    environment:
+      - POSTGRES_DB=rag_platform_db
+      - POSTGRES_USER=rag_platform_user
+      - POSTGRES_PASSWORD=rag_platform_password
+      - POSTGRES_HOST_AUTH_METHOD=password
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_platform_user -d rag_plarform_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag-platform-network
+
+
+  airflow-postgres:
+    image: postgres:16-alpine
+    container_name: rag-airflow-postgres
+    environment:
+      - POSTGRES_DB=airflow_db
+      - POSTGRES_USER=${AIRFLOW_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${AIRFLOW_POSTGRES_PASSWORD}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIRFLOW_POSTGRES_USER} -d airflow_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag-platform-network
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: rag-airflow-init
+    command: ["/entrypoint.sh", "init"]
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: rag-airflow-webserver
+    command: ["/entrypoint.sh", "webserver"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: rag-airflow-scheduler
+    command: ["/entrypoint.sh", "scheduler"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  airflow_postgres_data:
+  airflow_logs:
 
 networks:
   rag-platform-network:
