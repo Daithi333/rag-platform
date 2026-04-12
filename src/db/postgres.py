@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
-from src.db.interfaces.base import BaseDatabase
+from src.db.base import BaseDatabase
 from src.config import PostgresSettings
 
 logger = structlog.getLogger(__name__)
@@ -38,9 +38,7 @@ class PostgresDatabase(BaseDatabase):
                 pool_pre_ping=True,  # Verify connections before use
             )
 
-            self.session_factory = sessionmaker(
-                bind=self.engine, expire_on_commit=False
-            )
+            self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
 
             # Test the connection
             assert self.engine is not None
@@ -67,9 +65,7 @@ class PostgresDatabase(BaseDatabase):
             logger.info("Postgres database initialized successfully")
             assert self.engine is not None
             logger.info(f"Database: {self.engine.url.database}")
-            logger.info(
-                f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}"
-            )
+            logger.info(f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}")
             logger.info("Database connection established")
 
         except Exception as e:

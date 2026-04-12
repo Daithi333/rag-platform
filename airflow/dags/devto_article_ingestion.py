@@ -1,0 +1,41 @@
+from datetime import datetime, timedelta
+
+from airflow import DAG
+from airflow.providers.standard.operators.python import PythonOperator
+
+
+from devto_ingestion.fetching import fetch_and_store_articles
+from devto_ingestion.setup import setup_environment
+
+default_args = {
+    "owner": "devto-ingestion",
+    "depends_on_past": False,
+    "start_date": datetime(2026, 3, 17),
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=30),
+}
+
+dag = DAG(
+    "devto_article_ingestion",
+    default_args=default_args,
+    description="Daily Dev.to article ingestion: fetch articles and store to PostgreSQL",
+    schedule="0 7 * * 1-5",
+    max_active_runs=1,
+    tags=["devto", "articles", "ingestion"],
+)
+
+setup_task = PythonOperator(
+    task_id="setup_environment",
+    python_callable=setup_environment,
+    dag=dag,
+)
+
+fetch_task = PythonOperator(
+    task_id="fetch_and_store_articles",
+    python_callable=fetch_and_store_articles,
+    dag=dag,
+)
+
+setup_task >> fetch_task

@@ -16,22 +16,13 @@ def test_health_success(client, base_url):
     assert data["service_name"] == "rag-platform-api"
 
 
-def test_health_invalid_method(client, base_url):
-    """Test health endpoint rejects POST method."""
-    response = client.post(f"{base_url}/health")
-
-    assert response.status_code == 405
-    data = response.json()
-    assert data == {"detail": "Method Not Allowed"}
-
-
 def test_invalid_route(client, base_url):
     """Test invalid route returns 404."""
     response = client.get(f"{base_url}/nonexistent")
 
     assert response.status_code == 404
     data = response.json()
-    assert data == {"detail": "Not Found"}
+    assert data == {"error": "HTTP_ERROR", "message": "Not Found", "details": {}}
 
 
 def test_invalid_route_no_base(client):
@@ -40,7 +31,20 @@ def test_invalid_route_no_base(client):
 
     assert response.status_code == 404
     data = response.json()
-    assert data == {"detail": "Not Found"}
+    assert data == {"error": "HTTP_ERROR", "message": "Not Found", "details": {}}
+
+
+def test_health_invalid_method(client, base_url):
+    """Test health endpoint rejects POST method with 405."""
+    response = client.post(f"{base_url}/health")
+
+    assert response.status_code == 405
+    data = response.json()
+    assert data == {
+        "error": "HTTP_ERROR",
+        "message": "Method Not Allowed",
+        "details": {},
+    }
 
 
 @pytest.fixture(scope="module")
@@ -68,6 +72,7 @@ def test_unhandled_exception_returns_json(client, app_with_error_route):
     data = response.json()
 
     assert data == {
-        "error": "InternalServerError",
-        "detail": "An unexpected error occurred",
+        "error": "INTERNAL_ERROR",
+        "message": "An unexpected error occurred",
+        "details": {},
     }

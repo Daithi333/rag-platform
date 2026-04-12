@@ -27,7 +27,9 @@ class PostgresSettings(BaseConfigSettings):
         case_sensitive=False,
     )
 
-    database_url: str = "postgresql://rag_platform_user:rag_platform_password@localhost:5432/rag_platform_db"
+    database_url: str = (
+        "postgresql://rag_platform_user:rag_platform_password@localhost:5432/rag_platform_db"
+    )
     echo_sql: bool = False
     pool_size: int = 20
     max_overflow: int = 0
@@ -35,9 +37,7 @@ class PostgresSettings(BaseConfigSettings):
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
-        if not (
-            v.startswith("postgresql://") or v.startswith("postgresql+psycopg2://")
-        ):
+        if not (v.startswith("postgresql://") or v.startswith("postgresql+psycopg2://")):
             raise ValueError(
                 "Database URL must start with 'postgresql://' or 'postgresql+psycopg2://'"
             )

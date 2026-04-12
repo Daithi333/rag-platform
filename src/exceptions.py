@@ -1,37 +1,54 @@
-from fastapi import HTTPException, status
+from enum import StrEnum
+from typing import Any
 
 
-# HTTP exceptions
-class AppException(HTTPException):
-    """Base exception for application errors."""
+class ErrorCode(StrEnum):
+    CONFLICT = "CONFLICT"
+    NOT_FOUND = "NOT_FOUND"
+    EXTERNAL_SERVICE_ERROR = "EXTERNAL_SERVICE_ERROR"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    HTTP_ERROR = "HTTP_ERROR"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
 
-    def __init__(
-        self, detail: str, status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
-    ):
-        super().__init__(status_code=status_code, detail=detail)
+
+class AppError(Exception):
+    """Base for all application errors."""
+
+    def __init__(self, message: str, code: ErrorCode, details: dict[str, Any] | None = None):
+        self.message = message
+        self.code = code
+        self.details = details or {}
+        super().__init__(message)
 
 
-class ResourceNotFound(AppException):
+class NotFoundError(AppError):
     def __init__(self, resource: str, identifier: str):
         super().__init__(
-            detail=f"{resource} with id '{identifier}' not found",
-            status_code=status.HTTP_404_NOT_FOUND,
+            message=f"{resource} with id '{identifier}' not found",
+            code=ErrorCode.NOT_FOUND,
+            details={"resource": resource, "identifier": identifier},
         )
 
 
-class ResourceConflict(AppException):
-    def __init__(self, detail: str):
-        super().__init__(detail=detail, status_code=status.HTTP_409_CONFLICT)
+class ConflictError(AppError):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        super().__init__(message=message, code=ErrorCode.CONFLICT, details=details)
 
 
-class ValidationError(AppException):
-    def __init__(self, detail: str):
+class ValidationError(AppError):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        super().__init__(message=message, code=ErrorCode.CONFLICT, details=details)
+
+
+class ExternalServiceError(AppError):
+    def __init__(self, service: str, message: str):
         super().__init__(
-            detail=detail, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+            message=f"{service}: {message}",
+            code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            details={"service": service},
         )
 
 
-# Internal application exceptions
 class DevToAPIException(Exception):
     """Base exception for Dev.to API errors."""
 

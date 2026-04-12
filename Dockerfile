@@ -13,6 +13,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY src /app/src
 
+FROM python:3.12.8-slim AS dev
+
+EXPOSE 8000
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY --from=base /app /app
+COPY --from=base /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=base /usr/local/bin/uvx /usr/local/bin/uvx
+ENV PATH="/app/.venv/bin:$PATH"
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
+
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
 FROM python:3.12.8-slim AS final
 
 EXPOSE 8000

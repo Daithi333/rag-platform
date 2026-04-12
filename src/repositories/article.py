@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from src.db.interfaces.base import BaseRepository
+from src.db.base import BaseRepository
 from src.models.article import Article
 from src.schemas.devto.article import ArticleCreate
 
@@ -20,19 +20,15 @@ class ArticleRepository(BaseRepository[Article, ArticleCreate]):
         self.session.refresh(db_article)
         return db_article
 
-    def get_by_id(self, record_id: UUID) -> Optional[Article]:
+    def get_by_id(self, record_id: UUID) -> Article | None:
         return self.session.scalar(select(Article).where(Article.id == record_id))
 
-    def get_by_source_id(self, source: str, source_id: str) -> Optional[Article]:
+    def get_by_source_id(self, source: str, source_id: str) -> Article | None:
         return self.session.scalar(
-            select(Article).where(
-                Article.source == source, Article.source_id == source_id
-            )
+            select(Article).where(Article.source == source, Article.source_id == source_id)
         )
 
-    def get_by_source(
-        self, source: str, limit: int = 100, offset: int = 0
-    ) -> list[Article]:
+    def get_by_source(self, source: str, limit: int = 100, offset: int = 0) -> list[Article]:
         stmt = (
             select(Article)
             .where(Article.source == source)
@@ -57,24 +53,23 @@ class ArticleRepository(BaseRepository[Article, ArticleCreate]):
         return True
 
     def list(self, limit: int = 100, offset: int = 0) -> list[Article]:
-        stmt = (
-            select(Article)
-            .order_by(Article.published_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = select(Article).order_by(Article.published_at.desc()).limit(limit).offset(offset)
         return list(self.session.scalars(stmt))
 
-    def get_count(self, source: Optional[str] = None) -> int:
+    def get_count(self, source: str | None = None) -> int:
         stmt = select(func.count(Article.id))
         if source:
             stmt = stmt.where(Article.source == source)
         return self.session.scalar(stmt) or 0
 
-    def upsert(self, data: ArticleCreate) -> Article:
+    def upsert(
+        self, data: ArticleCreate
+    ) -> tuple[Article, Literal["created", "updated", "unchanged"]]:
         existing = self.get_by_source_id(data.source, data.source_id)
         if existing:
+            if existing.content_hash and existing.content_hash == data.content_hash:
+                return existing, "unchanged"
             for key, value in data.model_dump().items():
                 setattr(existing, key, value)
-            return self.update(existing)
-        return self.create(data)
+            return self.update(existing), "updated"
+        return self.create(data), "created"

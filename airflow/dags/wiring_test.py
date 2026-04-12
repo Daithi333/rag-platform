@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 
+import httpx
 import psycopg2
-import requests
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 
 
 def hello_world():
@@ -15,7 +15,7 @@ def check_services():
     """Check if other services are accessible."""
     try:
         # Check API health
-        response = requests.get("http://rag-platform-api:8000/api/v1/health", timeout=5)
+        response = httpx.get("http://rag-platform-api:8000/api/v1/health", timeout=5)
         print(f"API Health: {response.status_code}")
 
         # Check database connection
@@ -50,7 +50,6 @@ dag = DAG(
     default_args=default_args,
     description="Check the wiring of API and DB from Airflow",
     schedule=None,
-    catchup=False,
     tags=["wiring_test"],
 )
 

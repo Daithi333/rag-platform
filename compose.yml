@@ -8,6 +8,11 @@ x-airflow-common: &airflow-common
     - AIRFLOW_HOME=/opt/airflow
     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/airflow_db
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__CORE__INTERNAL_API_URL=http://airflow-webserver:8080
+    - AIRFLOW__CORE__EXECUTION_API_SERVER_URL=http://airflow-webserver:8080/execution/
+    - AIRFLOW__API_AUTH__JWT_SECRET=dev-jwt-secret-change-in-production
+    - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS=admin:admin
+    - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=True
     - POSTGRES__DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/rag_db
     - OPENSEARCH__HOST=http://opensearch:9200
     - REDIS__HOST=redis
@@ -21,7 +26,9 @@ x-airflow-common: &airflow-common
 
 services:
   api:
-    build: .
+    build:
+      context: .
+      target: dev
     container_name: rag-platform-api
     ports:
       - "8000:8000"
@@ -33,12 +40,16 @@ services:
       start_period: 40s
     env_file:
       - .env
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
     networks:
       - rag-platform-network
 
   postgres:
     image: postgres:16-alpine
     container_name: rag-platform-postgres
+    attach: false
     environment:
       - POSTGRES_DB=rag_platform_db
       - POSTGRES_USER=rag_platform_user
@@ -50,7 +61,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rag_platform_user -d rag_plarform_db"]
+      test: ["CMD-SHELL", "pg_isready -U rag_platform_user -d rag_platform_db"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -59,10 +70,10 @@ services:
     networks:
       - rag-platform-network
 
-
   airflow-postgres:
     image: postgres:16-alpine
     container_name: rag-airflow-postgres
+    attach: false
     environment:
       - POSTGRES_DB=airflow_db
       - POSTGRES_USER=${AIRFLOW_POSTGRES_USER}
@@ -92,14 +103,14 @@ services:
   airflow-webserver:
     <<: *airflow-common
     container_name: rag-airflow-webserver
-    command: ["/entrypoint.sh", "webserver"]
+    command: ["/entrypoint.sh", "api-server"]
     depends_on:
       airflow-init:
         condition: service_completed_successfully
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -110,6 +121,15 @@ services:
     <<: *airflow-common
     container_name: rag-airflow-scheduler
     command: ["/entrypoint.sh", "scheduler"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: rag-airflow-dag-processor
+    command: [ "/entrypoint.sh", "dag-processor" ]
     depends_on:
       airflow-init:
         condition: service_completed_successfully

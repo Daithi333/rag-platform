@@ -32,6 +32,16 @@ class DevToClient:
             headers["api-key"] = self._settings.api_key
         return headers
 
+    async def health_check(self) -> dict:
+        async with httpx.AsyncClient(
+            timeout=self._settings.timeout_seconds, headers=self._headers
+        ) as client:
+            response = await client.get(
+                f"{self._settings.base_url}/articles", params={"per_page": 1}
+            )
+            response.raise_for_status()
+        return {"status": "ok", "authenticated": bool(self._settings.api_key)}
+
     async def fetch_articles(self, tag: str, page: int = 1) -> list[DevToArticle]:
         """Fetch a single page of articles for a given tag."""
         url = f"{self._settings.base_url}/articles"
@@ -51,15 +61,11 @@ class DevToClient:
         except DevToRateLimitError:
             raise
         except httpx.TimeoutException as e:
-            raise DevToAPITimeoutError(
-                f"Dev.to API timed out fetching tag '{tag}': {e}"
-            )
+            raise DevToAPITimeoutError(f"Dev.to API timed out fetching tag '{tag}': {e}")
         except Exception as e:
             raise DevToAPIException(f"Failed to fetch articles for tag '{tag}': {e}")
 
-    async def fetch_all_articles(
-        self, tags: list[str] | None = None
-    ) -> list[DevToArticle]:
+    async def fetch_all_articles(self, tags: list[str] | None = None) -> list[DevToArticle]:
         """Fetch all articles across configured tags with pagination."""
         tags = tags or self._settings.tags
         all_articles: list[DevToArticle] = []

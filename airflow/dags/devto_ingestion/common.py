@@ -13,7 +13,6 @@ def get_cached_services() -> Tuple[Any, Any]:
     """Get cached services"""
     logger.info("Initializing services")
 
-    # Initialize core services
     database = make_database()
     devto = make_devto_client()
 
