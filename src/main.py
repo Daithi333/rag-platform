@@ -1,11 +1,17 @@
 import os
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
+import structlog
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from opensearchpy import OpenSearch
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.config import get_settings
+from src.db.factory import make_database
 from src.exceptions import AppError, ErrorCode
 from src.logs import setup_logging
 from src.middlewares import RequestLoggingMiddleware
@@ -13,11 +19,37 @@ from src.routers import health
 from src.schemas.api.errors import ErrorResponse
 
 setup_logging()
+logger = structlog.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+
+    database = make_database()
+    app.state.database = database
+
+    opensearch = OpenSearch(
+        hosts=[settings.opensearch.host],
+        use_ssl=False,
+        verify_certs=False,
+        ssl_show_warn=False,
+    )
+    app.state.opensearch = opensearch
+    logger.info("Services initialised", opensearch_host=settings.opensearch.host)
+
+    yield
+
+    database.teardown()
+    opensearch.close()
+    logger.info("Services shut down")
+
 
 app = FastAPI(
     title="RAG Platform API",
     description="Public Data Source Ingestion and RAG querying platform",
     version=os.getenv("APP_VERSION", "0.1.0"),
+    lifespan=lifespan,
 )
 
 app.include_router(health.router, prefix="/api/v1")

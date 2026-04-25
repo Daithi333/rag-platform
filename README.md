@@ -23,3 +23,9 @@ docker compose exec api pytest tests/integration -v      # run integration tests
 docker compose logs airflow-webserver | grep -i password # obtain Airflow admin password after 1st time init
 docker compose down                                      # stop and remove containers
 ```
+
+## Future Enhancements
+
+- Weekly "deep refresh" DAG with higher `max_pages` to catch edits to older articles that the daily ingestion (capped at 50 pages per tag) would miss
+- Additional data sources: Stack Overflow Q&A, GitHub discussions
+- Langfuse tracing and Redis caching for production monitoring and performance

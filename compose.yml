@@ -60,6 +60,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rag_platform_user -d rag_platform_db"]
       interval: 5s
@@ -135,10 +136,55 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  opensearch:
+    image: opensearchproject/opensearch:2.19.0
+    container_name: rag-platform-opensearch
+    attach: false
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_SECURITY_PLUGIN=true
+      - bootstrap.memory_lock=true
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - rag-platform-network
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.19.0
+    container_name: rag-platform-opensearch-dashboards
+    attach: false
+    ports:
+      - "5601:5601"
+    environment:
+      - OPENSEARCH_HOSTS=http://opensearch:9200
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rag-platform-network
+
 volumes:
   postgres_data:
   airflow_postgres_data:
   airflow_logs:
+  opensearch_data:
 
 networks:
   rag-platform-network:

@@ -155,7 +155,7 @@ class TestDevToClient:
             with pytest.raises(DevToAPIException) as exc_info:
                 await client.fetch_articles(tag="python")
 
-            assert "500" in str(exc_info.value)
+            assert "Server error" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_fetch_all_articles_deduplicates(self, client):

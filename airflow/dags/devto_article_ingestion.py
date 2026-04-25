@@ -5,6 +5,7 @@ from airflow.providers.standard.operators.python import PythonOperator
 
 
 from devto_ingestion.fetching import fetch_and_store_articles
+from devto_ingestion.reporting import generate_daily_report
 from devto_ingestion.setup import setup_environment
 
 default_args = {
@@ -38,4 +39,10 @@ fetch_task = PythonOperator(
     dag=dag,
 )
 
-setup_task >> fetch_task
+report_task = PythonOperator(
+    task_id="generate_daily_report",
+    python_callable=generate_daily_report,
+    dag=dag,
+)
+
+setup_task >> fetch_task >> report_task

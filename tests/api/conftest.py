@@ -1,17 +1,18 @@
 import logging
+from contextlib import contextmanager
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src.config import Settings
-from src.dependencies import get_settings
+from src.dependencies import get_database, get_opensearch, get_settings
 from src.main import app
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment():
     """Configure test environment."""
-    # Disable logging
     logging.disable(logging.CRITICAL)
     yield
     logging.disable(logging.NOTSET)
@@ -30,14 +31,39 @@ def mock_settings():
         app_version="0.1.0",
         environment="development",
         service_name="rag-platform-api",
-        # Add other required settings with defaults
     )
 
 
 @pytest.fixture
-def client(mock_settings):
+def mock_database():
+    """Mock database that returns a session where SELECT 1 succeeds."""
+    db = MagicMock()
+    session = MagicMock()
+
+    @contextmanager
+    def fake_session():
+        yield session
+
+    db.get_session = fake_session
+    return db
+
+
+@pytest.fixture
+def mock_opensearch():
+    """Mock OpenSearch client with healthy cluster response."""
+    client = MagicMock()
+    client.cluster.health.return_value = {"status": "green"}
+    return client
+
+
+@pytest.fixture
+def client(mock_settings, mock_database, mock_opensearch):
     """Test client with mocked dependencies."""
     app.dependency_overrides[get_settings] = lambda: mock_settings
+    app.dependency_overrides[get_database] = lambda: mock_database
+    app.dependency_overrides[get_opensearch] = lambda: mock_opensearch
 
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
+
+    app.dependency_overrides.clear()

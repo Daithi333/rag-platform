@@ -30,6 +30,9 @@ class PostgresSettings(BaseConfigSettings):
     database_url: str = (
         "postgresql://rag_platform_user:rag_platform_password@localhost:5432/rag_platform_db"
     )
+    test_database_url: str = (
+        "postgresql://rag_platform_user:rag_platform_password@localhost:5432/rag_platform_test_db"
+    )
     echo_sql: bool = False
     pool_size: int = 20
     max_overflow: int = 0
@@ -59,7 +62,31 @@ class DevToSettings(BaseConfigSettings):
     rate_limit_delay: float = 0.5  # Seconds between requests
     timeout_seconds: int = 30
     max_retries: int = 3
+    max_pages: int = 50  # Cap pagination depth per tag
     tags: list[str] = ["python", "webdev"]  # Tags to ingest
+
+
+class OpenSearchSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="OPENSEARCH__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    host: str = "http://localhost:9200"
+    index_name: str = "devto-articles"
+    chunk_index_suffix: str = "chunks"
+    max_text_size: int = 1_000_000
+
+    # Vector search
+    vector_dimension: int = 1024
+    vector_space_type: str = "cosinesimil"
+
+    # Hybrid search
+    rrf_pipeline_name: str = "hybrid-rrf-pipeline"
+    hybrid_search_size_multiplier: int = 2
 
 
 class Settings(BaseConfigSettings):
@@ -70,6 +97,7 @@ class Settings(BaseConfigSettings):
 
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     devto: DevToSettings = Field(default_factory=DevToSettings)
+    opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
 
 
 def get_settings() -> Settings:
