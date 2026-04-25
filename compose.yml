@@ -13,7 +13,7 @@ x-airflow-common: &airflow-common
     - AIRFLOW__API_AUTH__JWT_SECRET=dev-jwt-secret-change-in-production
     - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS=admin:admin
     - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=True
-    - POSTGRES__DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/rag_db
+    - POSTGRES__DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/rag_platform_db
     - OPENSEARCH__HOST=http://opensearch:9200
     - REDIS__HOST=redis
   volumes:

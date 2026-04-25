@@ -4,14 +4,15 @@ from typing import Generator
 import structlog
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker, DeclarativeBase
 from src.db.base import BaseDatabase
 from src.config import PostgresSettings
 
 logger = structlog.getLogger(__name__)
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
 class PostgresDatabase(BaseDatabase):

@@ -73,7 +73,8 @@ class DevToClient:
 
         for tag in tags:
             page = 1
-            logger.info(f"Fetching articles for tag: {tag}")
+            tag_new = 0
+            logger.info("Starting fetch", tag=tag)
 
             while True:
                 articles = await self.fetch_articles(tag=tag, page=page)
@@ -85,6 +86,16 @@ class DevToClient:
                     if article.id not in seen_ids:
                         seen_ids.add(article.id)
                         all_articles.append(article)
+                        tag_new += 1
+
+                logger.info(
+                    "Page fetched",
+                    tag=tag,
+                    page=page,
+                    page_count=len(articles),
+                    new_this_page=tag_new,
+                    total_unique=len(all_articles),
+                )
 
                 if len(articles) < self._settings.per_page:
                     break
@@ -92,8 +103,9 @@ class DevToClient:
                 page += 1
                 await asyncio.sleep(self._settings.rate_limit_delay)
 
-            logger.info(f"Fetched {len(all_articles)} unique articles so far")
+            logger.info("Tag complete", tag=tag, pages=page, new_articles=tag_new)
 
+        logger.info("Fetch complete", total_unique=len(all_articles), tags=tags)
         return all_articles
 
     @retry(

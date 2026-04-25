@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, field_validator, BeforeValidator
+from pydantic import BaseModel, BeforeValidator
 
 
 def parse_tags(v: str | list[str]) -> list[str]:
@@ -25,13 +25,6 @@ class DevToArticle(BaseModel):
     reading_time_minutes: int | None = None
     tags: Tags = []
     user: dict
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def parse_tags(cls, v):
-        if isinstance(v, str):
-            return [t.strip() for t in v.split(",") if t.strip()]
-        return v or []
 
 
 class ArticleCreate(BaseModel):

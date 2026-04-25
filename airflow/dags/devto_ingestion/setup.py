@@ -1,16 +1,16 @@
 import asyncio
-import logging
 
+import structlog
 from sqlalchemy import text
 
 from .common import get_cached_services
 
-logger = logging.getLogger(__name__)
+logger = structlog.getLogger(__name__)
 
 
-def setup_environment():
+def setup_environment() -> dict:
     """Setup environment and verify dependencies."""
-    logger.info("Setting up environment for Dev.To article ingestion")
+    logger.info("Setting up environment for Dev.to article ingestion")
 
     try:
         database, devto_client = get_cached_services()
@@ -20,11 +20,10 @@ def setup_environment():
             logger.info("Database connection verified")
 
         devto_health = asyncio.run(devto_client.health_check())
-        logger.info(f"Dev.To client ready (authenticated: {devto_health['authenticated']})")
+        logger.info("Dev.to client ready", authenticated=devto_health["authenticated"])
 
         return {"status": "success", "message": "Environment setup completed"}
 
     except Exception as e:
-        error_msg = f"Environment setup failed: {str(e)}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
+        logger.error("Environment setup failed", error=str(e))
+        raise

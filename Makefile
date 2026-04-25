@@ -38,7 +38,16 @@ logs:
 	docker compose logs -f --tail=200
 
 test:
-	uv run pytest -v
+	docker compose exec api pytest -v
+
+test-unit:
+	docker compose exec api pytest tests/unit -v
+
+test-api:
+	docker compose exec api pytest tests/api -v
+
+test-integration:
+	docker compose exec api pytest tests/integration -v
 
 lint:
 	uv run ruff check .
