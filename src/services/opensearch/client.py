@@ -50,6 +50,35 @@ class OpenSearchClient:
     def index_exists(self, index_name: str) -> bool:
         return self._client.indices.exists(index=index_name)
 
+    def document_exists(self, index_name: str, field: str, value: str) -> bool:
+        """Check if any document with field=value exists in the index."""
+        try:
+            if not self.index_exists(index_name):
+                return False
+            response = self._client.count(
+                index=index_name, body={"query": {"term": {field: value}}}
+            )
+            return response.get("count", 0) > 0
+        except Exception:
+            return False
+
+    def get_indexed_ids(self, index_name: str, field: str) -> set[str]:
+        """Get all unique values for a keyword field. Useful for bulk 'already indexed' checks."""
+        try:
+            if not self.index_exists(index_name):
+                return set()
+            result = self._client.search(
+                index=index_name,
+                body={
+                    "size": 0,
+                    "aggs": {"ids": {"terms": {"field": field, "size": 100000}}},
+                },
+            )
+            return {bucket["key"] for bucket in result["aggregations"]["ids"]["buckets"]}
+        except Exception as e:
+            logger.error("Failed to get indexed IDs", error=str(e))
+            return set()
+
     def create_index(self, index_name: str, mapping: dict[str, Any], force: bool = False) -> bool:
         """Create an index with the given mapping. Returns True if created."""
         try:

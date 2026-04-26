@@ -1,6 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from typing import Callable
 
 import structlog
 import uvicorn
@@ -22,29 +23,38 @@ setup_logging()
 logger = structlog.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()
+def create_lifespan(
+    database_factory: Callable = make_database,
+    opensearch_factory: Callable = make_opensearch_client,
+):
+    """Create a lifespan with injectable service factories."""
 
-    database = make_database()
-    app.state.database = database
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        settings = get_settings()
 
-    opensearch = make_opensearch_client()
-    app.state.opensearch = opensearch
-    logger.info("Services initialised", opensearch_host=settings.opensearch.host)
+        database = database_factory()
+        app.state.database = database
 
-    yield
+        opensearch = opensearch_factory()
+        app.state.opensearch = opensearch
 
-    database.teardown()
-    opensearch.close()
-    logger.info("Services shut down")
+        logger.info("Services initialised", opensearch_host=settings.opensearch.host)
+
+        yield
+
+        database.teardown()
+        opensearch.close()
+        logger.info("Services shut down")
+
+    return lifespan
 
 
 app = FastAPI(
     title="RAG Platform API",
     description="Public Data Source Ingestion and RAG querying platform",
     version=os.getenv("APP_VERSION", "0.1.0"),
-    lifespan=lifespan,
+    lifespan=create_lifespan(),
 )
 
 app.include_router(health.router, prefix="/api/v1")

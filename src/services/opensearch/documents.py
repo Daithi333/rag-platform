@@ -5,9 +5,9 @@ import uuid
 from src.models.article import Article
 
 
-def build_chunk_doc(article: Article, chunk: dict) -> dict:
+def build_chunk_doc(article: Article, chunk: dict, embedding: list[float] | None = None) -> dict:
     """Map an Article + chunk dict to an OpenSearch chunk document."""
-    return {
+    doc = {
         "chunk_id": str(uuid.uuid4()),
         "article_id": str(article.id),
         "source_id": article.source_id,
@@ -21,3 +21,6 @@ def build_chunk_doc(article: Article, chunk: dict) -> dict:
         "url": article.url,
         "published_date": (article.published_at.isoformat() if article.published_at else None),
     }
+    if embedding is not None:
+        doc["embedding"] = embedding
+    return doc

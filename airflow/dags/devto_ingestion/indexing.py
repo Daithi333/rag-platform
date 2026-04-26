@@ -1,4 +1,6 @@
-"""Index articles from Postgres into OpenSearch as chunks (BM25 only)."""
+"""Index articles from Postgres into OpenSearch as chunks with embeddings."""
+
+import asyncio
 
 import structlog
 from datetime import datetime
@@ -9,6 +11,7 @@ from airflow.sdk import get_current_context
 from src.config import get_settings
 from src.models.article import Article
 from src.services.chunking import chunk_text
+from src.services.embeddings.factory import make_embedding_client
 from src.services.opensearch.documents import build_chunk_doc
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.opensearch.index_config import (
@@ -65,14 +68,17 @@ def index_articles() -> dict:
 
     logger.info("Starting indexing", total_articles=len(articles))
 
-    _index_article_batch(articles, os_client, index_name, settings, counts)
+    asyncio.run(_index_article_batch(articles, os_client, index_name, settings, counts))
 
     logger.info("Indexing complete", **counts)
     return counts
 
 
-def index_articles_by_date(start_date: str, end_date: str | None = None) -> dict:
-    """Index articles within a date range. Used by the backfill DAG."""
+def index_articles_by_date(
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict:
+    """Index articles with bodies. Deletes old chunks before re-indexing."""
     settings = get_settings()
     database, _ = get_cached_services()
     os_client = make_opensearch_client()
@@ -80,11 +86,14 @@ def index_articles_by_date(start_date: str, end_date: str | None = None) -> dict
 
     counts = {"articles_processed": 0, "chunks_indexed": 0, "errors": 0}
 
-    start = datetime.fromisoformat(start_date)
     stmt = select(Article).where(
         Article.source == "devto",
-        Article.created_at >= start,
+        Article.body_markdown.isnot(None),
     )
+
+    if start_date:
+        stmt = stmt.where(Article.created_at >= datetime.fromisoformat(start_date))
+
     if end_date:
         stmt = stmt.where(Article.created_at <= datetime.fromisoformat(end_date))
 
@@ -93,20 +102,23 @@ def index_articles_by_date(start_date: str, end_date: str | None = None) -> dict
 
     logger.info("Starting backfill indexing", total_articles=len(articles))
 
-    _index_article_batch(articles, os_client, index_name, settings, counts)
+    asyncio.run(_index_article_batch(articles, os_client, index_name, settings, counts))
 
     logger.info("Backfill indexing complete", **counts)
     return counts
 
 
-def _index_article_batch(articles, os_client, index_name, settings, counts) -> None:
-    """Chunk and index a list of articles."""
+async def _index_article_batch(articles, os_client, index_name, settings, counts) -> None:
+    """Chunk, embed, and index a list of articles."""
+    embedding_client = make_embedding_client()
+    has_api_key = bool(settings.jina.api_key and settings.jina.api_key != "your_jina_api_key_here")
+
     for i in range(0, len(articles), BATCH_SIZE):
         batch = articles[i : i + BATCH_SIZE]
-        docs = []
+        chunk_texts: list[str] = []
+        chunk_article_map: list[tuple[Article, dict]] = []
 
         for article in batch:
-            # Delete existing chunks for this article before re-indexing
             os_client.delete_by_query(index_name, {"term": {"article_id": str(article.id)}})
 
             content = article.body_markdown or article.description or ""
@@ -116,18 +128,33 @@ def _index_article_batch(articles, os_client, index_name, settings, counts) -> N
                 continue
 
             for chunk in chunks:
-                docs.append(build_chunk_doc(article, chunk))
+                chunk_texts.append(chunk["chunk_text"])
+                chunk_article_map.append((article, chunk))
 
             counts["articles_processed"] += 1
 
-        if docs:
+        if not chunk_texts:
+            continue
+
+        embeddings: list[list[float]] | None = None
+        if has_api_key:
             try:
-                result = os_client.bulk_index(index_name, docs)
-                counts["chunks_indexed"] += result["success"]
-                counts["errors"] += result["failed"]
+                embeddings = await embedding_client.embed_texts(chunk_texts)
             except Exception as e:
-                logger.error("Bulk index batch failed", error=str(e))
-                counts["errors"] += len(docs)
+                logger.error("Embedding generation failed, indexing without vectors", error=str(e))
+
+        docs = []
+        for idx, (article, chunk) in enumerate(chunk_article_map):
+            embedding = embeddings[idx] if embeddings else None
+            docs.append(build_chunk_doc(article, chunk, embedding=embedding))
+
+        try:
+            result = os_client.bulk_index(index_name, docs)
+            counts["chunks_indexed"] += result["success"]
+            counts["errors"] += result["failed"]
+        except Exception as e:
+            logger.error("Bulk index batch failed", error=str(e))
+            counts["errors"] += len(docs)
 
         if (i + BATCH_SIZE) % 200 == 0:
             logger.info("Indexing progress", **counts)

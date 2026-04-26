@@ -100,6 +100,52 @@ class DevToClient:
 
         logger.info("Tag complete", tag=tag, pages_fetched=page - 1)
 
+    async def fetch_article_body(self, article_id: int) -> str | None:
+        """Fetch the full body_markdown for a single article by its Dev.to ID.
+
+        Returns the markdown body, or None if the article has no body.
+        Handles rate limiting by waiting and retrying.
+        """
+        url = f"{self._settings.base_url}/articles/{article_id}"
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._settings.timeout_seconds, headers=self._headers
+            ) as client:
+                response = await self._get_with_rate_limit_retry(client, url)
+
+            data = response.json()
+            return data.get("body_markdown")
+
+        except DevToRateLimitError:
+            raise
+        except httpx.TimeoutException as e:
+            raise DevToAPITimeoutError(f"Dev.to API timed out fetching article {article_id}: {e}")
+        except Exception as e:
+            raise DevToAPIException(f"Failed to fetch article {article_id}: {e}")
+
+    async def _get_with_rate_limit_retry(
+        self, client: httpx.AsyncClient, url: str, max_retries: int = 5
+    ) -> httpx.Response:
+        """GET with rate-limit-aware retry. Waits for Retry-After on 429."""
+        for attempt in range(max_retries):
+            response = await client.get(url, headers=self._headers)
+
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", 30))
+                logger.warning(
+                    "Rate limited, waiting",
+                    retry_after=retry_after,
+                    attempt=attempt + 1,
+                )
+                await asyncio.sleep(retry_after)
+                continue
+
+            response.raise_for_status()
+            return response
+
+        raise DevToRateLimitError(f"Rate limited after {max_retries} retries for {url}")
+
     async def fetch_all_articles(self, tags: list[str] | None = None) -> list[DevToArticle]:
         """Fetch all articles across configured tags with pagination.
 

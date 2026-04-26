@@ -7,7 +7,33 @@ from fastapi.testclient import TestClient
 
 from src.config import Settings
 from src.dependencies import get_database, get_opensearch, get_settings
-from src.main import app
+from src.main import app, create_lifespan
+
+
+def _mock_database_factory():
+    db = MagicMock()
+    session = MagicMock()
+
+    @contextmanager
+    def fake_session():
+        yield session
+
+    db.get_session = fake_session
+    return db
+
+
+def _mock_opensearch_factory():
+    client = MagicMock()
+    client.health_check.return_value = {"status": "green", "healthy": True}
+    client.close.return_value = None
+    return client
+
+
+# Replace the lifespan with one that uses mock factories
+app.router.lifespan_context = create_lifespan(
+    database_factory=_mock_database_factory,
+    opensearch_factory=_mock_opensearch_factory,
+)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -36,24 +62,14 @@ def mock_settings():
 
 @pytest.fixture
 def mock_database():
-    """Mock database that returns a session where SELECT 1 succeeds."""
-    db = MagicMock()
-    session = MagicMock()
-
-    @contextmanager
-    def fake_session():
-        yield session
-
-    db.get_session = fake_session
-    return db
+    """Mock database for dependency override."""
+    return _mock_database_factory()
 
 
 @pytest.fixture
 def mock_opensearch():
-    """Mock OpenSearchClient with healthy cluster response."""
-    client = MagicMock()
-    client.health_check.return_value = {"status": "green", "healthy": True}
-    return client
+    """Mock OpenSearchClient for dependency override."""
+    return _mock_opensearch_factory()
 
 
 @pytest.fixture

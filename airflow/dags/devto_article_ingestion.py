@@ -4,6 +4,7 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 
 
+from devto_ingestion.body_fetching import fetch_bodies_for_changed
 from devto_ingestion.fetching import fetch_and_store_articles
 from devto_ingestion.indexing import index_articles, setup_opensearch_index
 from devto_ingestion.reporting import generate_daily_report
@@ -40,6 +41,12 @@ fetch_task = PythonOperator(
     dag=dag,
 )
 
+fetch_bodies_task = PythonOperator(
+    task_id="fetch_article_bodies",
+    python_callable=fetch_bodies_for_changed,
+    dag=dag,
+)
+
 setup_opensearch_task = PythonOperator(
     task_id="setup_opensearch_index",
     python_callable=setup_opensearch_index,
@@ -59,4 +66,5 @@ report_task = PythonOperator(
 )
 
 setup_task >> [fetch_task, setup_opensearch_task]
-[fetch_task, setup_opensearch_task] >> index_task >> report_task
+fetch_task >> fetch_bodies_task
+[fetch_bodies_task, setup_opensearch_task] >> index_task >> report_task
