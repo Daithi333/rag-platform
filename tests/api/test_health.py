@@ -35,7 +35,7 @@ def test_health_success(client, base_url):
 def test_health_degraded_when_opensearch_red(mock_settings, mock_database, base_url):
     """Test health returns degraded when OpenSearch cluster is red."""
     os_client = MagicMock()
-    os_client.cluster.health.return_value = {"status": "red"}
+    os_client.health_check.return_value = {"status": "red", "healthy": False}
 
     with _make_client(mock_settings, mock_database, os_client) as c:
         response = c.get(f"{base_url}/health")
@@ -70,7 +70,11 @@ def test_health_error_when_database_down(mock_settings, mock_opensearch, base_ur
 def test_health_error_when_opensearch_unreachable(mock_settings, mock_database, base_url):
     """Test health returns error when OpenSearch is unreachable."""
     os_client = MagicMock()
-    os_client.cluster.health.side_effect = Exception("Connection refused")
+    os_client.health_check.return_value = {
+        "status": "unreachable",
+        "healthy": False,
+        "error": "Connection refused",
+    }
 
     with _make_client(mock_settings, mock_database, os_client) as c:
         response = c.get(f"{base_url}/health")

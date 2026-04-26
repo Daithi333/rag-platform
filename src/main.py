@@ -7,7 +7,6 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from opensearchpy import OpenSearch
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.config import get_settings
@@ -17,6 +16,7 @@ from src.logs import setup_logging
 from src.middlewares import RequestLoggingMiddleware
 from src.routers import health
 from src.schemas.api.errors import ErrorResponse
+from src.services.opensearch.factory import make_opensearch_client
 
 setup_logging()
 logger = structlog.getLogger(__name__)
@@ -29,12 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     database = make_database()
     app.state.database = database
 
-    opensearch = OpenSearch(
-        hosts=[settings.opensearch.host],
-        use_ssl=False,
-        verify_certs=False,
-        ssl_show_warn=False,
-    )
+    opensearch = make_opensearch_client()
     app.state.opensearch = opensearch
     logger.info("Services initialised", opensearch_host=settings.opensearch.host)
 

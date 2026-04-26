@@ -89,6 +89,36 @@ class OpenSearchSettings(BaseConfigSettings):
     hybrid_search_size_multiplier: int = 2
 
 
+class ChunkingSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="CHUNKING__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    chunk_size: int = 600  # Target words per chunk
+    overlap_size: int = 100  # Words to overlap between chunks
+    min_chunk_size: int = 100  # Minimum words for a valid chunk
+
+
+class JinaSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="JINA__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    api_key: str = ""
+    model: str = "jina-embeddings-v3"
+    base_url: str = "https://api.jina.ai/v1"
+    batch_size: int = 32
+    timeout_seconds: int = 60
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -98,6 +128,8 @@ class Settings(BaseConfigSettings):
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     devto: DevToSettings = Field(default_factory=DevToSettings)
     opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
+    chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
+    jina: JinaSettings = Field(default_factory=JinaSettings)
 
 
 def get_settings() -> Settings:

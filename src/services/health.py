@@ -1,9 +1,9 @@
 import structlog
-from opensearchpy import OpenSearch
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.schemas.api.health import ServiceStatus
+from src.services.opensearch.client import OpenSearchClient
 
 logger = structlog.getLogger(__name__)
 
@@ -18,14 +18,11 @@ def check_database(session: Session) -> ServiceStatus:
         return ServiceStatus(status="unhealthy", message=str(e))
 
 
-def check_opensearch(client: OpenSearch) -> ServiceStatus:
+def check_opensearch(client: OpenSearchClient) -> ServiceStatus:
     """Check OpenSearch cluster health."""
-    try:
-        health = client.cluster.health()
-        cluster_status = health.get("status", "unknown")
-        if cluster_status in ("green", "yellow"):
-            return ServiceStatus(status="healthy", message=f"cluster: {cluster_status}")
-        return ServiceStatus(status="degraded", message=f"cluster: {cluster_status}")
-    except Exception as e:
-        logger.error("OpenSearch health check failed", error=str(e))
-        return ServiceStatus(status="unhealthy", message=str(e))
+    result = client.health_check()
+    if result["healthy"]:
+        return ServiceStatus(status="healthy", message=f"cluster: {result['status']}")
+    if result.get("error"):
+        return ServiceStatus(status="unhealthy", message=result["error"])
+    return ServiceStatus(status="degraded", message=f"cluster: {result['status']}")

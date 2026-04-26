@@ -34,6 +34,7 @@ def _upsert_page(
     articles: list[DevToArticle],
     seen_ids: set[int],
     counts: dict[str, int],
+    changed_ids: list[str],
 ) -> None:
     for article in articles:
         if article.id in seen_ids:
@@ -41,13 +42,17 @@ def _upsert_page(
         seen_ids.add(article.id)
 
         data = _to_article_create(article)
-        _, status = repo.upsert(data)
+        record, status = repo.upsert(data)
         counts[status] += 1
+
+        if status in ("created", "updated"):
+            changed_ids.append(str(record.id))
 
 
 async def _fetch_and_persist(database, devto_client) -> dict:
     tags = devto_client._settings.tags
     counts = {"created": 0, "updated": 0, "unchanged": 0}
+    changed_ids: list[str] = []
     seen_ids: set[int] = set()
     total_pages = 0
 
@@ -56,7 +61,7 @@ async def _fetch_and_persist(database, devto_client) -> dict:
 
         for tag in tags:
             async for page_articles in devto_client.fetch_articles_by_tag(tag):
-                _upsert_page(repo, page_articles, seen_ids, counts)
+                _upsert_page(repo, page_articles, seen_ids, counts, changed_ids)
                 total_pages += 1
 
                 if len(seen_ids) % 50 < len(page_articles):
@@ -75,8 +80,9 @@ async def _fetch_and_persist(database, devto_client) -> dict:
         created=counts["created"],
         updated=counts["updated"],
         unchanged=counts["unchanged"],
+        changed=len(changed_ids),
     )
-    return {**counts, "total": len(seen_ids)}
+    return {**counts, "total": len(seen_ids), "changed_article_ids": changed_ids}
 
 
 def fetch_and_store_articles() -> dict:

@@ -50,9 +50,9 @@ def mock_database():
 
 @pytest.fixture
 def mock_opensearch():
-    """Mock OpenSearch client with healthy cluster response."""
+    """Mock OpenSearchClient with healthy cluster response."""
     client = MagicMock()
-    client.cluster.health.return_value = {"status": "green"}
+    client.health_check.return_value = {"status": "green", "healthy": True}
     return client
 
 

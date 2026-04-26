@@ -2,10 +2,10 @@ from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, Request
-from opensearchpy import OpenSearch
 
 from src.config import Settings
 from src.db.base import BaseDatabase
+from src.services.opensearch.client import OpenSearchClient
 
 
 @lru_cache
@@ -19,7 +19,7 @@ def get_database(request: Request) -> BaseDatabase:
     return request.app.state.database
 
 
-def get_opensearch(request: Request) -> OpenSearch:
+def get_opensearch(request: Request) -> OpenSearchClient:
     """Get OpenSearch client from app state."""
     return request.app.state.opensearch
 
@@ -27,4 +27,4 @@ def get_opensearch(request: Request) -> OpenSearch:
 # Dependency annotations
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
-OpenSearchDep = Annotated[OpenSearch, Depends(get_opensearch)]
+OpenSearchDep = Annotated[OpenSearchClient, Depends(get_opensearch)]

@@ -15,6 +15,7 @@ def generate_daily_report() -> dict:
     ti = context["ti"]
 
     fetch_stats = ti.xcom_pull(task_ids="fetch_and_store_articles") or {}
+    index_stats = ti.xcom_pull(task_ids="index_articles") or {}
 
     database, _ = get_cached_services()
 
@@ -31,6 +32,11 @@ def generate_daily_report() -> dict:
             "created": fetch_stats.get("created", 0),
             "updated": fetch_stats.get("updated", 0),
             "unchanged": fetch_stats.get("unchanged", 0),
+        },
+        "indexing": {
+            "articles_processed": index_stats.get("articles_processed", 0),
+            "chunks_indexed": index_stats.get("chunks_indexed", 0),
+            "errors": index_stats.get("errors", 0),
         },
         "database": db_stats,
         "status": "success" if fetch_stats else "no_fetch_data",
