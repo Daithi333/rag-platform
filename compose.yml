@@ -168,6 +168,8 @@ services:
     image: opensearchproject/opensearch-dashboards:2.19.0
     container_name: rag-platform-opensearch-dashboards
     attach: false
+    profiles:
+      - dashboards
     ports:
       - "5601:5601"
     environment:

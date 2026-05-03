@@ -172,3 +172,72 @@ Documents that rank well in both searches bubble to the top. The constant `k=60`
 | pgvector | PostgreSQL License | Yes (extension) | Any managed PG |
 
 OpenSearch is a good fit here because it supports both keyword and vector search natively with hybrid RRF, is self-hosted and open source, and has mature full-text analysis capabilities that pure vector databases lack.
+
+
+## Useful Commands
+
+### Cluster health
+
+```bash
+curl http://localhost:9200/_cluster/health
+```
+
+### Total chunks in index
+
+```bash
+curl -s "http://localhost:9200/devto-articles-chunks/_count" | python3 -m json.tool
+```
+
+### Chunks with embeddings
+
+```bash
+curl -s "http://localhost:9200/devto-articles-chunks/_count" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":{"exists":{"field":"embedding"}}}'
+```
+
+### Chunks missing embeddings
+
+```bash
+curl -s "http://localhost:9200/devto-articles-chunks/_count" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":{"bool":{"must_not":{"exists":{"field":"embedding"}}}}}'
+```
+
+### Unique article IDs missing embeddings
+
+```bash
+curl -s "http://localhost:9200/devto-articles-chunks/_search" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "size": 0,
+    "query": {"bool": {"must_not": {"exists": {"field": "embedding"}}}},
+    "aggs": {"article_ids": {"terms": {"field": "article_id", "size": 100000}}}
+  }'
+```
+
+### Index stats (document count, size)
+
+```bash
+curl -s "http://localhost:9200/devto-articles-chunks/_stats" | python3 -m json.tool
+```
+
+### Delete the index (use with caution)
+
+```bash
+curl -X DELETE "http://localhost:9200/devto-articles-chunks"
+```
+
+### Disk watermark settings (if index creation is blocked)
+
+```bash
+curl -X PUT http://localhost:9200/_cluster/settings \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "persistent": {
+      "cluster.routing.allocation.disk.watermark.low": "95%",
+      "cluster.routing.allocation.disk.watermark.high": "98%",
+      "cluster.routing.allocation.disk.watermark.flood_stage": "99%"
+    }
+  }'
+```

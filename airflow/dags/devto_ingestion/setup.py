@@ -13,13 +13,13 @@ def setup_environment() -> dict:
     logger.info("Setting up environment for Dev.to article ingestion")
 
     try:
-        database, devto_client = get_cached_services()
+        svc = get_cached_services()
 
-        with database.get_session() as session:
+        with svc.database.get_session() as session:
             session.execute(text("SELECT 1"))
             logger.info("Database connection verified")
 
-        devto_health = asyncio.run(devto_client.health_check())
+        devto_health = asyncio.run(svc.devto.health_check())
         logger.info("Dev.to client ready", authenticated=devto_health["authenticated"])
 
         return {"status": "success", "message": "Environment setup completed"}

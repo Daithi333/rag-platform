@@ -66,10 +66,27 @@ class ArticleRepository(BaseRepository[Article, ArticleCreate]):
         self, data: ArticleCreate
     ) -> tuple[Article, Literal["created", "updated", "unchanged"]]:
         existing = self.get_by_source_id(data.source, data.source_id)
-        if existing:
-            if existing.content_hash and existing.content_hash == data.content_hash:
-                return existing, "unchanged"
-            for key, value in data.model_dump().items():
-                setattr(existing, key, value)
-            return self.update(existing), "updated"
-        return self.create(data), "created"
+        if not existing:
+            return self.create(data), "created"
+
+        # Both null or both equal: no change detected
+        if existing.edited_at == data.edited_at:
+            return existing, "unchanged"
+
+        # Backfill: existing has no timestamp, incoming does
+        if not existing.edited_at and data.edited_at:
+            existing.edited_at = data.edited_at
+            self.update(existing)
+            return existing, "unchanged"
+
+        # Existing has timestamp, incoming doesn't: no change signal
+        if existing.edited_at and not data.edited_at:
+            return existing, "unchanged"
+
+        # Both have timestamps: only update if incoming is newer
+        if existing.edited_at >= data.edited_at:
+            return existing, "unchanged"
+
+        for key, value in data.model_dump().items():
+            setattr(existing, key, value)
+        return self.update(existing), "updated"

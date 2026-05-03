@@ -79,6 +79,31 @@ class OpenSearchClient:
             logger.error("Failed to get indexed IDs", error=str(e))
             return set()
 
+    def get_ids_missing_field(self, index_name: str, field: str, id_field: str) -> set[str]:
+        """Get unique IDs of documents where a field does not exist."""
+        try:
+            if not self.index_exists(index_name):
+                return set()
+            result = self._client.search(
+                index=index_name,
+                body={
+                    "size": 0,
+                    "query": {"bool": {"must_not": {"exists": {"field": field}}}},
+                    "aggs": {"ids": {"terms": {"field": id_field, "size": 100000}}},
+                },
+            )
+            ids = {bucket["key"] for bucket in result["aggregations"]["ids"]["buckets"]}
+            logger.info(
+                "Found documents missing field",
+                index=index_name,
+                field=field,
+                count=len(ids),
+            )
+            return ids
+        except Exception as e:
+            logger.error("Failed to get IDs missing field", error=str(e))
+            return set()
+
     def create_index(self, index_name: str, mapping: dict[str, Any], force: bool = False) -> bool:
         """Create an index with the given mapping. Returns True if created."""
         try:

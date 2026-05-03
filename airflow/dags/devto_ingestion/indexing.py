@@ -1,9 +1,9 @@
 """Index articles from Postgres into OpenSearch as chunks with embeddings."""
 
 import asyncio
+from datetime import datetime
 
 import structlog
-from datetime import datetime
 from sqlalchemy import select
 
 from airflow.sdk import get_current_context
@@ -11,9 +11,7 @@ from airflow.sdk import get_current_context
 from src.config import get_settings
 from src.models.article import Article
 from src.services.chunking import chunk_text
-from src.services.embeddings.factory import make_embedding_client
 from src.services.opensearch.documents import build_chunk_doc
-from src.services.opensearch.factory import make_opensearch_client
 from src.services.opensearch.index_config import (
     DEVTO_CHUNKS_MAPPING,
     HYBRID_RRF_PIPELINE,
@@ -30,11 +28,11 @@ BATCH_SIZE = 50
 def setup_opensearch_index() -> dict:
     """Create the chunk index and RRF pipeline if they don't exist."""
     settings = get_settings()
-    os_client = make_opensearch_client()
+    svc = get_cached_services()
     index_name = get_chunk_index_name(settings.opensearch)
 
-    index_created = os_client.create_index(index_name, DEVTO_CHUNKS_MAPPING)
-    pipeline_created = os_client.create_search_pipeline(
+    index_created = svc.opensearch.create_index(index_name, DEVTO_CHUNKS_MAPPING)
+    pipeline_created = svc.opensearch.create_search_pipeline(
         settings.opensearch.rrf_pipeline_name, HYBRID_RRF_PIPELINE
     )
 
@@ -57,18 +55,19 @@ def index_articles() -> dict:
         return {"articles_processed": 0, "chunks_indexed": 0, "errors": 0}
 
     settings = get_settings()
-    database, _ = get_cached_services()
-    os_client = make_opensearch_client()
+    svc = get_cached_services()
     index_name = get_chunk_index_name(settings.opensearch)
 
     counts = {"articles_processed": 0, "chunks_indexed": 0, "errors": 0}
 
-    with database.get_session() as session:
+    with svc.database.get_session() as session:
         articles = list(session.scalars(select(Article).where(Article.id.in_(article_ids))))
 
     logger.info("Starting indexing", total_articles=len(articles))
 
-    asyncio.run(_index_article_batch(articles, os_client, index_name, settings, counts))
+    asyncio.run(
+        _index_article_batch(articles, svc.opensearch, svc.embeddings, index_name, settings, counts)
+    )
 
     logger.info("Indexing complete", **counts)
     return counts
@@ -77,14 +76,14 @@ def index_articles() -> dict:
 def index_articles_by_date(
     start_date: str | None = None,
     end_date: str | None = None,
+    only_missing: bool = False,
 ) -> dict:
-    """Index articles with bodies. Deletes old chunks before re-indexing."""
+    """Index articles with bodies, optionally skipping already-indexed ones."""
     settings = get_settings()
-    database, _ = get_cached_services()
-    os_client = make_opensearch_client()
+    svc = get_cached_services()
     index_name = get_chunk_index_name(settings.opensearch)
 
-    counts = {"articles_processed": 0, "chunks_indexed": 0, "errors": 0}
+    counts = {"articles_processed": 0, "chunks_indexed": 0, "skipped_indexed": 0, "errors": 0}
 
     stmt = select(Article).where(
         Article.source == "devto",
@@ -97,20 +96,62 @@ def index_articles_by_date(
     if end_date:
         stmt = stmt.where(Article.created_at <= datetime.fromisoformat(end_date))
 
-    with database.get_session() as session:
+    with svc.database.get_session() as session:
         articles = list(session.scalars(stmt))
+
+    if only_missing:
+        already_indexed = svc.opensearch.get_indexed_ids(index_name, "article_id")
+        before = len(articles)
+        articles = [a for a in articles if str(a.id) not in already_indexed]
+        counts["skipped_indexed"] = before - len(articles)
+        logger.info(
+            "Filtered to unindexed articles",
+            total=before,
+            already_indexed=counts["skipped_indexed"],
+            to_index=len(articles),
+        )
 
     logger.info("Starting backfill indexing", total_articles=len(articles))
 
-    asyncio.run(_index_article_batch(articles, os_client, index_name, settings, counts))
+    asyncio.run(
+        _index_article_batch(articles, svc.opensearch, svc.embeddings, index_name, settings, counts)
+    )
 
     logger.info("Backfill indexing complete", **counts)
     return counts
 
 
-async def _index_article_batch(articles, os_client, index_name, settings, counts) -> None:
+def reindex_missing_embeddings() -> dict:
+    """Find articles with chunks missing embeddings and re-index them."""
+    settings = get_settings()
+    svc = get_cached_services()
+    index_name = get_chunk_index_name(settings.opensearch)
+
+    missing_ids = svc.opensearch.get_ids_missing_field(index_name, "embedding", "article_id")
+
+    if not missing_ids:
+        logger.info("No articles with missing embeddings")
+        return {"articles_processed": 0, "chunks_indexed": 0, "errors": 0}
+
+    counts = {"articles_processed": 0, "chunks_indexed": 0, "errors": 0}
+
+    with svc.database.get_session() as session:
+        articles = list(session.scalars(select(Article).where(Article.id.in_(list(missing_ids)))))
+
+    logger.info("Re-indexing articles with missing embeddings", total=len(articles))
+
+    asyncio.run(
+        _index_article_batch(articles, svc.opensearch, svc.embeddings, index_name, settings, counts)
+    )
+
+    logger.info("Missing embeddings backfill complete", **counts)
+    return counts
+
+
+async def _index_article_batch(
+    articles, os_client, embedding_client, index_name, settings, counts
+) -> None:
     """Chunk, embed, and index a list of articles."""
-    embedding_client = make_embedding_client()
     has_api_key = bool(settings.jina.api_key and settings.jina.api_key != "your_jina_api_key_here")
 
     for i in range(0, len(articles), BATCH_SIZE):
@@ -141,7 +182,10 @@ async def _index_article_batch(articles, os_client, index_name, settings, counts
             try:
                 embeddings = await embedding_client.embed_texts(chunk_texts)
             except Exception as e:
-                logger.error("Embedding generation failed, indexing without vectors", error=str(e))
+                logger.error(
+                    "Embedding generation failed, indexing without vectors",
+                    error=str(e),
+                )
 
         docs = []
         for idx, (article, chunk) in enumerate(chunk_article_map):

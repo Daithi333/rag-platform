@@ -9,7 +9,6 @@ from src.schemas.devto.article import ArticleCreate
 def _make_article_data(
     source_id: str = "100",
     title: str = "Test Article",
-    content_hash: str = "abc123",
     **overrides,
 ) -> ArticleCreate:
     defaults = {
@@ -20,10 +19,10 @@ def _make_article_data(
         "body_markdown": "# Hello",
         "url": f"https://dev.to/test/article-{source_id}",
         "published_at": datetime(2026, 1, 15, tzinfo=timezone.utc),
+        "edited_at": datetime(2026, 1, 15, tzinfo=timezone.utc),
         "reading_time_minutes": 5,
         "tags": ["python", "testing"],
         "author": "Test Author",
-        "content_hash": content_hash,
     }
     defaults.update(overrides)
     return ArticleCreate(**defaults)
@@ -94,36 +93,80 @@ class TestArticleUpsert:
         assert status == "created"
         assert article.source_id == "400"
 
-    def test_unchanged_when_hash_matches(self, session: Session):
+    def test_unchanged_when_edited_at_same(self, session: Session):
         repo = ArticleRepository(session)
-        data = _make_article_data(source_id="500", content_hash="same_hash")
+        edited = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        data = _make_article_data(source_id="500", edited_at=edited)
         repo.create(data)
 
         article, status = repo.upsert(data)
 
         assert status == "unchanged"
 
-    def test_updated_when_hash_differs(self, session: Session):
+    def test_unchanged_when_edited_at_older(self, session: Session):
         repo = ArticleRepository(session)
-        original = _make_article_data(source_id="600", content_hash="hash_v1", title="Original")
-        repo.create(original)
+        repo.create(
+            _make_article_data(source_id="501", edited_at=datetime(2026, 2, 1, tzinfo=timezone.utc))
+        )
 
-        updated_data = _make_article_data(source_id="600", content_hash="hash_v2", title="Updated")
+        older = _make_article_data(
+            source_id="501", edited_at=datetime(2026, 1, 1, tzinfo=timezone.utc)
+        )
+        _, status = repo.upsert(older)
+
+        assert status == "unchanged"
+
+    def test_updated_when_edited_at_newer(self, session: Session):
+        repo = ArticleRepository(session)
+        repo.create(
+            _make_article_data(
+                source_id="600",
+                edited_at=datetime(2026, 1, 1),
+                title="Original",
+            )
+        )
+
+        updated_data = _make_article_data(
+            source_id="600",
+            edited_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+            title="Updated",
+        )
         article, status = repo.upsert(updated_data)
 
         assert status == "updated"
         assert article.title == "Updated"
-        assert article.content_hash == "hash_v2"
 
-    def test_updated_when_existing_has_no_hash(self, session: Session):
+    def test_unchanged_when_both_edited_at_null(self, session: Session):
         repo = ArticleRepository(session)
-        original = _make_article_data(source_id="700", content_hash=None)
-        repo.create(original)
+        data = _make_article_data(source_id="698", edited_at=None)
+        repo.create(data)
 
-        updated_data = _make_article_data(source_id="700", content_hash="new_hash")
-        _, status = repo.upsert(updated_data)
+        _, status = repo.upsert(data)
 
-        assert status == "updated"
+        assert status == "unchanged"
+
+    def test_unchanged_backfills_edited_at(self, session: Session):
+        repo = ArticleRepository(session)
+        repo.create(_make_article_data(source_id="700", edited_at=None))
+
+        backfill_data = _make_article_data(
+            source_id="700", edited_at=datetime(2026, 1, 1, tzinfo=timezone.utc)
+        )
+        article, status = repo.upsert(backfill_data)
+
+        assert status == "unchanged"
+        assert article.edited_at == datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def test_unchanged_when_incoming_has_no_edited_at(self, session: Session):
+        repo = ArticleRepository(session)
+        repo.create(
+            _make_article_data(source_id="701", edited_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+        )
+
+        data = _make_article_data(source_id="701", edited_at=None)
+        _, status = repo.upsert(data)
+
+        assert status == "unchanged"
 
 
 class TestArticleUpdate:

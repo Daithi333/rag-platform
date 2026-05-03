@@ -16,6 +16,10 @@ def settings():
         base_url="https://api.jina.ai/v1",
         batch_size=2,
         timeout_seconds=5,
+        max_retries=3,
+        retry_multiplier=0.01,
+        retry_min_wait=0,
+        retry_max_wait=0,
     )
 
 
@@ -139,7 +143,7 @@ class TestErrorHandling:
             with pytest.raises(httpx.HTTPStatusError):
                 await client.embed_texts(["test"])
 
-            assert mock_post.call_count == 3  # 3 retries
+            assert mock_post.call_count == 3
 
     @pytest.mark.asyncio
     async def test_timeout_retries_then_raises(self, client):

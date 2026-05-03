@@ -15,8 +15,9 @@ A production-ready Retrieval-Augmented Generation (RAG) platform for ingesting, 
 ## Docker
 
 ```bash
-docker compose up                                        # start api and db
-docker compose exec api pytest -v                        # all run tests
+docker compose up                                        # start stack
+docker compose --profile dashboards up                   # start stack with OpenSearch Dashboards (localhost:5601)
+docker compose exec api pytest -v                        # run all tests
 docker compose exec api pytest tests/unit -v             # run unit tests
 docker compose exec api pytest tests/api -v              # run api tests
 docker compose exec api pytest tests/integration -v      # run integration tests (requires devto connectivity)

@@ -22,6 +22,7 @@ class DevToArticle(BaseModel):
     body_markdown: str | None = None
     url: str
     published_at: datetime
+    edited_at: datetime | None = None
     reading_time_minutes: int | None = None
     tags: Tags = []
     user: dict
@@ -37,7 +38,7 @@ class ArticleCreate(BaseModel):
     body_markdown: str | None = None
     url: str
     published_at: datetime
+    edited_at: datetime | None = None
     reading_time_minutes: int | None = None
     tags: list[str] = []
     author: str
-    content_hash: str | None = None

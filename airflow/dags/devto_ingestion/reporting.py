@@ -1,6 +1,7 @@
 import structlog
-from airflow.sdk import get_current_context
 from sqlalchemy import func
+
+from airflow.sdk import get_current_context
 
 from src.models.article import Article
 
@@ -17,10 +18,10 @@ def generate_daily_report() -> dict:
     fetch_stats = ti.xcom_pull(task_ids="fetch_and_store_articles") or {}
     index_stats = ti.xcom_pull(task_ids="index_articles") or {}
 
-    database, _ = get_cached_services()
+    svc = get_cached_services()
 
     db_stats = {}
-    with database.get_session() as session:
+    with svc.database.get_session() as session:
         db_stats["total_articles"] = session.query(func.count(Article.id)).scalar() or 0
         db_stats["total_devto"] = (
             session.query(func.count(Article.id)).filter(Article.source == "devto").scalar() or 0

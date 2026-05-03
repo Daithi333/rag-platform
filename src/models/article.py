@@ -18,15 +18,15 @@ class Article(Base):
     description = Column(Text, nullable=True)
     body_markdown = Column(Text, nullable=True)
     url = Column(String, nullable=False)
-    published_at = Column(DateTime, nullable=False)
+    published_at = Column(DateTime(timezone=True), nullable=False)
+    edited_at = Column(DateTime(timezone=True), nullable=True)
     reading_time_minutes = Column(Integer, nullable=True)
     tags = Column(JSON, nullable=False, default=list)
     author = Column(String, nullable=False)
-    content_hash = Column(String, nullable=True, index=True)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )

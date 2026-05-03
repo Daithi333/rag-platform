@@ -6,6 +6,9 @@ from datetime import datetime
 import structlog
 from sqlalchemy import select
 
+from airflow.sdk import get_current_context
+
+from src.config import get_settings
 from src.models.article import Article
 from src.repositories.article import ArticleRepository
 
@@ -16,6 +19,7 @@ logger = structlog.getLogger(__name__)
 
 async def _fetch_bodies(database, devto_client, articles: list[Article]) -> dict:
     """Fetch body_markdown for a list of articles and update Postgres."""
+    settings = get_settings()
     counts = {"fetched": 0, "skipped": 0, "errors": 0}
 
     with database.get_session() as session:
@@ -44,7 +48,7 @@ async def _fetch_bodies(database, devto_client, articles: list[Article]) -> dict
                 )
                 counts["errors"] += 1
 
-            await asyncio.sleep(devto_client._settings.rate_limit_delay)
+            await asyncio.sleep(settings.devto.rate_limit_delay)
 
             if (i + 1) % 50 == 0:
                 logger.info("Body fetch progress", processed=i + 1, **counts)
@@ -55,8 +59,6 @@ async def _fetch_bodies(database, devto_client, articles: list[Article]) -> dict
 
 def fetch_bodies_for_changed() -> dict:
     """Fetch bodies for articles created/updated in the current DAG run."""
-    from airflow.sdk import get_current_context
-
     context = get_current_context()
     ti = context["ti"]
     fetch_stats = ti.xcom_pull(task_ids="fetch_and_store_articles") or {}
@@ -66,13 +68,13 @@ def fetch_bodies_for_changed() -> dict:
         logger.info("No changed articles to fetch bodies for")
         return {"fetched": 0, "skipped": 0, "errors": 0}
 
-    database, devto_client = get_cached_services()
+    svc = get_cached_services()
 
-    with database.get_session() as session:
+    with svc.database.get_session() as session:
         articles = list(session.scalars(select(Article).where(Article.id.in_(article_ids))))
 
     logger.info("Fetching bodies for changed articles", count=len(articles))
-    return asyncio.run(_fetch_bodies(database, devto_client, articles))
+    return asyncio.run(_fetch_bodies(svc.database, svc.devto, articles))
 
 
 def fetch_bodies_by_date(
@@ -81,7 +83,7 @@ def fetch_bodies_by_date(
     only_missing: bool = True,
 ) -> dict:
     """Fetch bodies for articles, optionally filtered by date and/or missing body."""
-    database, devto_client = get_cached_services()
+    svc = get_cached_services()
 
     stmt = select(Article).where(Article.source == "devto")
 
@@ -94,7 +96,7 @@ def fetch_bodies_by_date(
     if end_date:
         stmt = stmt.where(Article.created_at <= datetime.fromisoformat(end_date))
 
-    with database.get_session() as session:
+    with svc.database.get_session() as session:
         articles = list(session.scalars(stmt))
 
     logger.info(
@@ -102,4 +104,4 @@ def fetch_bodies_by_date(
         total=len(articles),
         only_missing=only_missing,
     )
-    return asyncio.run(_fetch_bodies(database, devto_client, articles))
+    return asyncio.run(_fetch_bodies(svc.database, svc.devto, articles))

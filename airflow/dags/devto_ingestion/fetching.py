@@ -4,7 +4,6 @@ import structlog
 
 from src.repositories.article import ArticleRepository
 from src.schemas.devto.article import ArticleCreate, DevToArticle
-from src.services.devto.hashing import compute_content_hash
 
 from .common import get_cached_services
 
@@ -22,10 +21,10 @@ def _to_article_create(article: DevToArticle) -> ArticleCreate:
         body_markdown=article.body_markdown,
         url=article.url,
         published_at=article.published_at,
+        edited_at=article.edited_at,
         reading_time_minutes=article.reading_time_minutes,
         tags=article.tags,
         author=article.user.get("name", "unknown"),
-        content_hash=compute_content_hash(article),
     )
 
 
@@ -86,5 +85,5 @@ async def _fetch_and_persist(database, devto_client) -> dict:
 
 
 def fetch_and_store_articles() -> dict:
-    database, devto_client = get_cached_services()
-    return asyncio.run(_fetch_and_persist(database, devto_client))
+    svc = get_cached_services()
+    return asyncio.run(_fetch_and_persist(svc.database, svc.devto))

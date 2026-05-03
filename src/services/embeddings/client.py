@@ -2,15 +2,10 @@
 
 import httpx
 import structlog
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from src.config import JinaSettings
 from src.exceptions import ExternalServiceError
+from src.utils.retry import http_retry
 
 logger = structlog.getLogger(__name__)
 
@@ -20,6 +15,7 @@ class EmbeddingClient:
 
     def __init__(self, settings: JinaSettings):
         self._settings = settings
+        self._call_api = http_retry(settings)(self._call_api)
 
     @property
     def _headers(self) -> dict:
@@ -29,10 +25,7 @@ class EmbeddingClient:
         }
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of texts, handling batching internally.
-
-        Returns a list of embedding vectors in the same order as the input.
-        """
+        """Embed a list of texts, handling batching internally."""
         if not texts:
             return []
 
@@ -41,7 +34,7 @@ class EmbeddingClient:
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            embeddings = await self._embed_batch(batch)
+            embeddings = await self._call_api(batch)
             all_embeddings.extend(embeddings)
 
             logger.info(
@@ -54,16 +47,8 @@ class EmbeddingClient:
 
         return all_embeddings
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(
-            (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError)
-        ),
-        reraise=True,
-    )
-    async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Embed a single batch of texts."""
+    async def _call_api(self, texts: list[str]) -> list[list[float]]:
+        """Execute the Jina API call."""
         url = f"{self._settings.base_url}/embeddings"
         payload = {
             "model": self._settings.model,
@@ -77,7 +62,8 @@ class EmbeddingClient:
 
             if response.status_code == 402:
                 raise ExternalServiceError(
-                    "Jina", "Insufficient tokens. Top up at https://jina.ai/embeddings"
+                    "Jina",
+                    "Insufficient tokens. Top up at https://jina.ai/embeddings",
                 )
 
             response.raise_for_status()
@@ -88,5 +74,5 @@ class EmbeddingClient:
 
     async def embed_single(self, text: str) -> list[float]:
         """Embed a single text. Convenience wrapper for search queries."""
-        results = await self._embed_batch([text])
+        results = await self._call_api([text])
         return results[0]

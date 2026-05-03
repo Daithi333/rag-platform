@@ -31,6 +31,9 @@ class TestDevToClient:
             rate_limit_delay=0.0,
             timeout_seconds=5,
             max_retries=3,
+            retry_multiplier=0.01,
+            retry_min_wait=0,
+            retry_max_wait=0,
             tags=["python", "webdev"],
         )
 

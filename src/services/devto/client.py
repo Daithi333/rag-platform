@@ -3,12 +3,6 @@ from collections.abc import AsyncIterator
 
 import httpx
 import structlog
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from src.config import DevToSettings
 from src.exceptions import (
@@ -18,6 +12,7 @@ from src.exceptions import (
     DevToRateLimitError,
 )
 from src.schemas.devto.article import DevToArticle
+from src.utils.retry import http_retry
 
 logger = structlog.getLogger(__name__)
 
@@ -25,6 +20,7 @@ logger = structlog.getLogger(__name__)
 class DevToClient:
     def __init__(self, settings: DevToSettings):
         self._settings = settings
+        self._get_with_retry = http_retry(settings)(self._get_with_retry)
 
     @property
     def _headers(self) -> dict:
@@ -166,14 +162,6 @@ class DevToClient:
         logger.info("Fetch complete", total_unique=len(all_articles), tags=tags)
         return all_articles
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(
-            (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError)
-        ),
-        reraise=True,
-    )
     async def _get_with_retry(
         self, client: httpx.AsyncClient, url: str, params: dict
     ) -> httpx.Response:

@@ -5,6 +5,7 @@ SHELL := /bin/bash
 help:
 	@echo "Infrastructure:"
 	@echo "  make up               - start stack"
+	@echo "  make up-dashboards    - start stack with OpenSearch Dashboards"
 	@echo "  make down             - stop stack"
 	@echo "  make build            - rebuild images"
 	@echo "  make ps               - show containers"
@@ -24,6 +25,9 @@ help:
 
 up:
 	docker compose up -d --build
+
+up-dashboards:
+	docker compose --profile dashboards up -d --build
 
 down:
 	docker compose down -v

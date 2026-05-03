@@ -18,7 +18,6 @@ def _defaults(**overrides) -> dict:
         "reading_time_minutes": 5,
         "tags": ["python"],
         "author": "Test Author",
-        "content_hash": "abc123",
     }
     base.update(overrides)
     return base
@@ -38,14 +37,14 @@ class TestArticleCreate:
                 description=None,
                 body_markdown=None,
                 reading_time_minutes=None,
-                content_hash=None,
+                edited_at=None,
             )
         )
 
         assert article.description is None
         assert article.body_markdown is None
         assert article.reading_time_minutes is None
-        assert article.content_hash is None
+        assert article.edited_at is None
 
     def test_tags_default_empty_list(self):
         data = _defaults()

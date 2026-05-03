@@ -47,7 +47,16 @@ class PostgresSettings(BaseConfigSettings):
         return v
 
 
-class DevToSettings(BaseConfigSettings):
+class RetrySettings(BaseConfigSettings):
+    """Shared retry configuration. Inherited by service settings that make HTTP calls."""
+
+    max_retries: int = 3
+    retry_multiplier: float = 2.0
+    retry_min_wait: int = 2
+    retry_max_wait: int = 20
+
+
+class DevToSettings(RetrySettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
         env_prefix="DEVTO__",
@@ -61,7 +70,6 @@ class DevToSettings(BaseConfigSettings):
     per_page: int = 30  # Max 1000
     rate_limit_delay: float = 0.5  # Seconds between requests
     timeout_seconds: int = 30
-    max_retries: int = 3
     max_pages: int = 50  # Cap pagination depth per tag
     tags: list[str] = ["python", "webdev"]  # Tags to ingest
 
@@ -103,7 +111,7 @@ class ChunkingSettings(BaseConfigSettings):
     min_chunk_size: int = 100  # Minimum words for a valid chunk
 
 
-class JinaSettings(BaseConfigSettings):
+class JinaSettings(RetrySettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
         env_prefix="JINA__",
@@ -117,6 +125,7 @@ class JinaSettings(BaseConfigSettings):
     base_url: str = "https://api.jina.ai/v1"
     batch_size: int = 32
     timeout_seconds: int = 60
+    max_retries: int = 5
 
 
 class Settings(BaseConfigSettings):
