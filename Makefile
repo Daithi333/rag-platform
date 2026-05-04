@@ -6,13 +6,18 @@ help:
 	@echo "Infrastructure:"
 	@echo "  make up               - start stack"
 	@echo "  make up-dashboards    - start stack with OpenSearch Dashboards"
+	@echo "  make up-ui            - start stack with Gradio UI"
 	@echo "  make down             - stop stack"
 	@echo "  make build            - rebuild images"
 	@echo "  make ps               - show containers"
 	@echo "  make logs             - tail logs"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test             - run all tests"
+	@echo "  make test             - run all tests (unit + api + integration)"
+	@echo "  make test-unit        - run unit tests"
+	@echo "  make test-api         - run api tests"
+	@echo "  make test-integration - run integration tests"
+	@echo "  make test-smoke       - run smoke tests (requires external services)"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint             - run ruff linter"
@@ -27,7 +32,10 @@ up:
 	docker compose up -d --build
 
 up-dashboards:
-	docker compose --profile dashboards up -d --build
+	docker compose --profile dashboards up -d
+
+up-ui:
+	docker compose --profile ui up -d
 
 down:
 	docker compose down -v
@@ -42,7 +50,7 @@ logs:
 	docker compose logs -f --tail=200
 
 test:
-	docker compose exec api pytest -v
+	docker compose exec api pytest tests/unit tests/api tests/integration -v
 
 test-unit:
 	docker compose exec api pytest tests/unit -v
@@ -52,6 +60,9 @@ test-api:
 
 test-integration:
 	docker compose exec api pytest tests/integration -v
+
+test-smoke:
+	docker compose exec api pytest tests/smoke -v
 
 lint:
 	uv run ruff check .

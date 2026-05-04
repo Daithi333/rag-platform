@@ -15,7 +15,7 @@ from src.db.factory import make_database
 from src.exceptions import AppError, ErrorCode
 from src.logs import setup_logging
 from src.middlewares import RequestLoggingMiddleware
-from src.routers import health
+from src.routers import health, search
 from src.schemas.api.errors import ErrorResponse
 from src.services.opensearch.factory import make_opensearch_client
 
@@ -58,6 +58,7 @@ app = FastAPI(
 )
 
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(search.router, prefix="/api/v1")
 
 app.add_middleware(RequestLoggingMiddleware)
 

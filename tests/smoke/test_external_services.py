@@ -1,3 +1,5 @@
+"""Smoke tests for external services. Require real API connectivity."""
+
 import pytest
 
 from src.services.devto.factory import make_devto_client
@@ -20,7 +22,7 @@ async def test_devto_client_health_check():
 
 @pytest.mark.asyncio
 async def test_jina_embed_single():
-    """Smoke test: embed a single text via the Jina API (requires valid API key)."""
+    """Embed a single text via the Jina API (requires valid API key)."""
     client = make_embedding_client()
     embedding = await client.embed_single("Python error handling best practices")
     assert isinstance(embedding, list)

@@ -17,10 +17,11 @@ A production-ready Retrieval-Augmented Generation (RAG) platform for ingesting, 
 ```bash
 docker compose up                                        # start stack
 docker compose --profile dashboards up                   # start stack with OpenSearch Dashboards (localhost:5601)
-docker compose exec api pytest -v                        # run all tests
+docker compose exec api pytest tests/unit tests/api tests/integration -v  # run all CI tests
 docker compose exec api pytest tests/unit -v             # run unit tests
 docker compose exec api pytest tests/api -v              # run api tests
-docker compose exec api pytest tests/integration -v      # run integration tests (requires devto connectivity)
+docker compose exec api pytest tests/integration -v      # run integration tests (requires test database)
+docker compose exec api pytest tests/smoke -v            # run smoke tests (requires external service connectivity)
 docker compose logs airflow-webserver | grep -i password # obtain Airflow admin password after 1st time init
 docker compose down                                      # stop and remove containers
 ```
@@ -52,6 +53,8 @@ Health endpoint checks liveness of PostgreSQL and OpenSearch. Services are initi
 
 ## Future Enhancements
 
+- A/B testing of search configurations (BM25 vs hybrid, field boost tuning) using DeepEval with pytest integration
+- Alembic database migrations with init container
 - Weekly "deep refresh" DAG with higher `max_pages` to catch edits to older articles that the daily ingestion (capped at 50 pages per tag) would miss
 - Additional data sources: Stack Overflow Q&A, GitHub discussions
 - Langfuse tracing and Redis caching for production monitoring and performance

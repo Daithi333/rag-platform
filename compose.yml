@@ -7,10 +7,13 @@ x-airflow-common: &airflow-common
   environment:
     - AIRFLOW_HOME=/opt/airflow
     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/airflow_db
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE=10
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW=20
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__CORE__PARALLELISM=4
     - AIRFLOW__CORE__INTERNAL_API_URL=http://airflow-webserver:8080
     - AIRFLOW__CORE__EXECUTION_API_SERVER_URL=http://airflow-webserver:8080/execution/
-    - AIRFLOW__API_AUTH__JWT_SECRET=dev-jwt-secret-change-in-production
+    - AIRFLOW__API_AUTH__JWT_SECRET=rag-platform-airflow-jwt-secret-key-for-local-dev-must-be-at-least-64-bytes-long
     - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS=admin:admin
     - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=True
     - POSTGRES__DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/rag_platform_db
@@ -177,6 +180,24 @@ services:
       - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
     depends_on:
       opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rag-platform-network
+
+  gradio:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: rag-platform-gradio
+    profiles:
+      - ui
+    ports:
+      - "7860:7860"
+    environment:
+      - API_BASE_URL=http://api:8000/api/v1
+    depends_on:
+      api:
         condition: service_healthy
     restart: unless-stopped
     networks:

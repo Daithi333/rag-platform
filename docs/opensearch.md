@@ -241,3 +241,30 @@ curl -X PUT http://localhost:9200/_cluster/settings \
     }
   }'
 ```
+
+
+## Query Structure
+
+### Bool query
+
+The top-level query wrapper. Combines conditions:
+- `must`: clauses that must match and affect relevance score (like AND)
+- `filter`: clauses that must match but do not affect scoring (like SQL WHERE)
+
+Example: `{"bool": {"must": [text_query], "filter": [tag_filter]}}` finds documents matching the text query, restricted to documents with the specified tags.
+
+### Multi-match text query
+
+Searches a query string across multiple fields:
+- `fields: ["chunk_text^3", "title^2", "description^1"]` — boost factors weight matches by field importance
+- `type: "best_fields"` — score by the single best-matching field, not the sum
+- `fuzziness: "AUTO"` — typo tolerance. 1-2 char words exact, 3-5 chars allow 1 edit, 6+ allow 2 edits
+- `prefix_length: 2` — first 2 characters must match exactly before fuzziness applies
+
+### Highlighting
+
+Returns text fragments with matched terms wrapped in markup:
+- `fragment_size: 150` — return 150-char snippets around matches
+- `number_of_fragments: 2` — up to 2 snippets per field
+- `fragment_size: 0` — return the entire field (used for title)
+- `require_field_match: False` — highlight terms even if the match came from a different field

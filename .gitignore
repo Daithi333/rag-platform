@@ -15,6 +15,9 @@ wheels/
 # Env files
 .env
 
+# project context
+/arxiv
+
 # IDE
 .idea/
 .vscode/
