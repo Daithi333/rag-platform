@@ -4,9 +4,14 @@ SHELL := /bin/bash
 
 help:
 	@echo "Infrastructure:"
-	@echo "  make up               - start stack"
-	@echo "  make up-dashboards    - start stack with OpenSearch Dashboards"
-	@echo "  make up-ui            - start stack with Gradio UI"
+	@echo "  make up               - start core (API + Postgres + OpenSearch)"
+	@echo "  make up-airflow       - start core + Airflow stack"
+	@echo "  make up-rag           - start core + Ollama + Gradio UI"
+	@echo "  make up-dashboards    - start core + OpenSearch Dashboards"
+	@echo "  make down             - stop stack"
+	@echo "  make build            - rebuild images"
+	@echo "  make ps               - show containers"
+	@echo "  make logs             - tail logs"
 	@echo "  make down             - stop stack"
 	@echo "  make build            - rebuild images"
 	@echo "  make ps               - show containers"
@@ -31,11 +36,14 @@ help:
 up:
 	docker compose up -d --build
 
+up-airflow:
+	docker compose --profile airflow up -d --build
+
+up-rag:
+	docker compose --profile rag up -d
+
 up-dashboards:
 	docker compose --profile dashboards up -d
-
-up-ui:
-	docker compose --profile ui up -d
 
 down:
 	docker compose down -v

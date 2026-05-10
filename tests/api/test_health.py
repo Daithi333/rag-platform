@@ -5,14 +5,28 @@ from unittest.mock import MagicMock
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
-from src.dependencies import get_database, get_opensearch, get_settings
+from src.dependencies import (
+    get_database,
+    get_embedding_client,
+    get_llm_client,
+    get_opensearch,
+    get_settings,
+)
 from src.main import app
 
 
-def _make_client(mock_settings, mock_database, mock_opensearch):
+def _make_client(
+    mock_settings, mock_database, mock_opensearch, mock_embedding_client=None, mock_llm_client=None
+):
+    from tests.api.conftest import _mock_embedding_factory, _mock_llm_factory
+
     app.dependency_overrides[get_settings] = lambda: mock_settings
     app.dependency_overrides[get_database] = lambda: mock_database
     app.dependency_overrides[get_opensearch] = lambda: mock_opensearch
+    app.dependency_overrides[get_embedding_client] = lambda: (
+        mock_embedding_client or _mock_embedding_factory()
+    )
+    app.dependency_overrides[get_llm_client] = lambda: mock_llm_client or _mock_llm_factory()
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -30,6 +44,7 @@ def test_health_success(client, base_url):
     assert data["service_name"] == "rag-platform-api"
     assert data["services"]["database"]["status"] == "healthy"
     assert data["services"]["opensearch"]["status"] == "healthy"
+    assert data["services"]["embeddings"]["status"] == "healthy"
 
 
 def test_health_degraded_when_opensearch_red(mock_settings, mock_database, base_url):

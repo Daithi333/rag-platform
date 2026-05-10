@@ -18,6 +18,7 @@ x-airflow-common: &airflow-common
     - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=True
     - POSTGRES__DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/rag_platform_db
     - OPENSEARCH__HOST=http://opensearch:9200
+    - OLLAMA__HOST=http://ollama:11434
     - REDIS__HOST=redis
   volumes:
     - ./airflow/dags:/opt/airflow/dags
@@ -78,6 +79,8 @@ services:
     image: postgres:16-alpine
     container_name: rag-airflow-postgres
     attach: false
+    profiles:
+      - airflow
     environment:
       - POSTGRES_DB=airflow_db
       - POSTGRES_USER=${AIRFLOW_POSTGRES_USER}
@@ -98,6 +101,8 @@ services:
   airflow-init:
     <<: *airflow-common
     container_name: rag-airflow-init
+    profiles:
+      - airflow
     command: ["/entrypoint.sh", "init"]
     depends_on:
       airflow-postgres:
@@ -107,6 +112,8 @@ services:
   airflow-webserver:
     <<: *airflow-common
     container_name: rag-airflow-webserver
+    profiles:
+      - airflow
     command: ["/entrypoint.sh", "api-server"]
     depends_on:
       airflow-init:
@@ -124,6 +131,8 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     container_name: rag-airflow-scheduler
+    profiles:
+      - airflow
     command: ["/entrypoint.sh", "scheduler"]
     depends_on:
       airflow-init:
@@ -133,6 +142,8 @@ services:
   airflow-dag-processor:
     <<: *airflow-common
     container_name: rag-airflow-dag-processor
+    profiles:
+      - airflow
     command: [ "/entrypoint.sh", "dag-processor" ]
     depends_on:
       airflow-init:
@@ -191,7 +202,7 @@ services:
       dockerfile: Dockerfile
     container_name: rag-platform-gradio
     profiles:
-      - ui
+      - rag
     ports:
       - "7860:7860"
     environment:
@@ -203,11 +214,31 @@ services:
     networks:
       - rag-platform-network
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag-platform-ollama
+    profiles:
+      - rag
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag-platform-network
+
 volumes:
   postgres_data:
   airflow_postgres_data:
   airflow_logs:
   opensearch_data:
+  ollama_data:
 
 networks:
   rag-platform-network:

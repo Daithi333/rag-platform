@@ -128,17 +128,40 @@ class JinaSettings(RetrySettings):
     max_retries: int = 5
 
 
+class OllamaSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="OLLAMA__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    host: str = "http://localhost:11434"
+    model: str = "llama3.2:3b"
+    timeout_seconds: int = 300
+    temperature: float = 0.7
+    top_p: float = 0.9
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
     environment: Literal["development", "staging", "production"] = "development"
     service_name: str = "rag-platform-api"
 
+    cors_origins: list[str] = [
+        "http://localhost:7860",
+        "http://localhost:3000",
+    ]
+    cors_methods: list[str] = ["GET", "POST"]
+
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     devto: DevToSettings = Field(default_factory=DevToSettings)
     opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
     jina: JinaSettings = Field(default_factory=JinaSettings)
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
 
 
 def get_settings() -> Settings:

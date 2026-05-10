@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.config import get_settings
@@ -15,8 +16,10 @@ from src.db.factory import make_database
 from src.exceptions import AppError, ErrorCode
 from src.logs import setup_logging
 from src.middlewares import RequestLoggingMiddleware
-from src.routers import health, search
+from src.routers import health, rag, search
 from src.schemas.api.errors import ErrorResponse
+from src.services.embeddings.factory import make_embedding_client
+from src.services.llm.factory import make_llm_client
 from src.services.opensearch.factory import make_opensearch_client
 
 setup_logging()
@@ -26,6 +29,8 @@ logger = structlog.getLogger(__name__)
 def create_lifespan(
     database_factory: Callable = make_database,
     opensearch_factory: Callable = make_opensearch_client,
+    embedding_factory: Callable = make_embedding_client,
+    llm_factory: Callable = make_llm_client,
 ):
     """Create a lifespan with injectable service factories."""
 
@@ -38,6 +43,9 @@ def create_lifespan(
 
         opensearch = opensearch_factory()
         app.state.opensearch = opensearch
+
+        app.state.embedding_client = embedding_factory()
+        app.state.llm_client = llm_factory()
 
         logger.info("Services initialised", opensearch_host=settings.opensearch.host)
 
@@ -59,8 +67,15 @@ app = FastAPI(
 
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
+app.include_router(rag.router, prefix="/api/v1")
 
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins,
+    allow_methods=get_settings().cors_methods,
+    allow_headers=["*"],
+)
 
 
 @app.exception_handler(AppError)

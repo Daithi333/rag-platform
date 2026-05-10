@@ -1,8 +1,7 @@
 from fastapi import APIRouter
 
-from src.dependencies import OpenSearchDep, SettingsDep
+from src.dependencies import EmbeddingDep, OpenSearchDep, SettingsDep
 from src.schemas.api.search import SearchRequest, SearchResponse
-from src.services.embeddings.factory import make_embedding_client
 from src.services.search import SearchService
 
 router = APIRouter()
@@ -13,11 +12,12 @@ async def search(
     request: SearchRequest,
     settings: SettingsDep,
     opensearch: OpenSearchDep,
+    embedding_client: EmbeddingDep,
 ) -> SearchResponse:
     """Search articles using BM25, vector, or hybrid search."""
     service = SearchService(
         opensearch=opensearch,
-        embedding_client=make_embedding_client(),
+        embedding_client=embedding_client,
         settings=settings.opensearch,
     )
 

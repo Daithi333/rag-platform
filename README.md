@@ -54,6 +54,7 @@ Health endpoint checks liveness of PostgreSQL and OpenSearch. Services are initi
 ## Future Enhancements
 
 - A/B testing of search configurations (BM25 vs hybrid, field boost tuning) using DeepEval with pytest integration
+- API rate limiting with slowapi + Redis backend
 - Alembic database migrations with init container
 - Weekly "deep refresh" DAG with higher `max_pages` to catch edits to older articles that the daily ingestion (capped at 50 pages per tag) would miss
 - Additional data sources: Stack Overflow Q&A, GitHub discussions
