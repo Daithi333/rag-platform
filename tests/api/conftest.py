@@ -14,6 +14,7 @@ from src.dependencies import (
     get_settings,
 )
 from src.main import app, create_lifespan
+from src.services.llm.base import LLMResponse
 
 
 def _mock_database_factory():
@@ -45,13 +46,13 @@ def _mock_embedding_factory():
 def _mock_llm_factory():
     client = MagicMock()
     client.generate = AsyncMock(
-        return_value={
-            "text": "This is a test answer.",
-            "model": "test-model",
-            "total_duration_ms": 100.0,
-            "prompt_tokens": 50,
-            "completion_tokens": 20,
-        }
+        return_value=LLMResponse(
+            text="This is a test answer.",
+            model="test-model",
+            total_duration_ms=100.0,
+            prompt_tokens=50,
+            completion_tokens=20,
+        )
     )
     client.health_check = AsyncMock(
         return_value={

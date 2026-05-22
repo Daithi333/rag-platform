@@ -7,7 +7,8 @@ import pytest
 
 from src.config import OllamaSettings
 from src.exceptions import ExternalServiceError
-from src.services.llm.client import LLMClient
+from src.services.llm.base import LLMResponse
+from src.services.llm.client import OllamaLLMClient
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def settings():
 
 @pytest.fixture
 def client(settings):
-    return LLMClient(settings=settings)
+    return OllamaLLMClient(settings=settings)
 
 
 class TestHealthCheck:
@@ -66,11 +67,12 @@ class TestGenerate:
             mock_http.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
             result = await client.generate("test prompt")
 
-        assert result["text"] == "Test answer"
-        assert result["model"] == "llama3.2:3b"
-        assert result["total_duration_ms"] == 500.0
-        assert result["prompt_tokens"] == 100
-        assert result["completion_tokens"] == 50
+        assert isinstance(result, LLMResponse)
+        assert result.text == "Test answer"
+        assert result.model == "llama3.2:3b"
+        assert result.total_duration_ms == 500.0
+        assert result.prompt_tokens == 100
+        assert result.completion_tokens == 50
 
     @pytest.mark.asyncio
     async def test_connection_error(self, client):

@@ -6,6 +6,7 @@ import structlog
 from opensearchpy import OpenSearch, helpers
 
 from src.config import OpenSearchSettings
+from src.exceptions import ExternalServiceError
 
 logger = structlog.getLogger(__name__)
 
@@ -256,4 +257,4 @@ class OpenSearchClient:
             }
         except Exception as e:
             logger.error("Search failed", index=index_name, error=str(e))
-            return {"total": 0, "hits": []}
+            raise ExternalServiceError("OpenSearch", str(e))

@@ -51,6 +51,32 @@ See [docs/opensearch.md](docs/opensearch.md) for detailed configuration and mapp
 
 Health endpoint checks liveness of PostgreSQL and OpenSearch. Services are initialised via a lifespan and injected into routes via FastAPI dependencies.
 
+### Ollama
+
+```bash
+docker compose exec ollama ollama pull llama3.2:3b    # Download llama3.2:3b model
+```
+
+### RAG
+
+The RAG endpoint retrieves relevant article chunks via hybrid search, then generates an answer using the configured LLM provider.
+
+Set the provider in `.env`:
+
+```bash
+LLM_PROVIDER=openai          # openai | groq | ollama
+OPENAI__API_KEY=sk-...        # required for openai provider
+GROQ__API_KEY=gsk_...         # required for groq provider
+```
+
+Example request:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What are the best practices for error handling in Python?", "tags": ["python"], "num_chunks": 5}'
+```
+
 ## Future Enhancements
 
 - A/B testing of search configurations (BM25 vs hybrid, field boost tuning) using DeepEval with pytest integration

@@ -1,3 +1,4 @@
+from enum import Enum
 from pathlib import Path
 from typing import Literal
 
@@ -128,6 +129,12 @@ class JinaSettings(RetrySettings):
     max_retries: int = 5
 
 
+class LLMProvider(str, Enum):
+    OLLAMA = "ollama"
+    OPENAI = "openai"
+    GROQ = "groq"
+
+
 class OllamaSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -144,6 +151,37 @@ class OllamaSettings(BaseConfigSettings):
     top_p: float = 0.9
 
 
+class OpenAISettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="OPENAI__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    api_key: str = ""
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini"
+    timeout_seconds: int = 60
+    temperature: float = 0.7
+    top_p: float = 0.9
+    max_tokens: int = 1024
+
+
+class GroqSettings(OpenAISettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="GROQ__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    base_url: str = "https://api.groq.com/openai/v1"
+    model: str = "llama-3.1-8b-instant"
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -156,12 +194,16 @@ class Settings(BaseConfigSettings):
     ]
     cors_methods: list[str] = ["GET", "POST"]
 
+    llm_provider: LLMProvider = LLMProvider.OPENAI
+
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     devto: DevToSettings = Field(default_factory=DevToSettings)
     opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
     jina: JinaSettings = Field(default_factory=JinaSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    openai: OpenAISettings = Field(default_factory=OpenAISettings)
+    groq: GroqSettings = Field(default_factory=GroqSettings)
 
 
 def get_settings() -> Settings:

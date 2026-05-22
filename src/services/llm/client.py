@@ -1,4 +1,4 @@
-"""Ollama LLM client for text generation."""
+"""Ollama LLM client for local text generation."""
 
 from collections.abc import AsyncIterator
 
@@ -8,17 +8,18 @@ import structlog
 from src.config import OllamaSettings
 from src.exceptions import ExternalServiceError
 
+from .base import BaseLLMClient, LLMResponse
+
 logger = structlog.getLogger(__name__)
 
 
-class LLMClient:
+class OllamaLLMClient(BaseLLMClient):
     """Client for Ollama local LLM service."""
 
     def __init__(self, settings: OllamaSettings):
         self._settings = settings
 
     async def health_check(self) -> dict:
-        """Check if Ollama is running and responsive."""
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.get(f"{self._settings.host}/api/version")
@@ -27,8 +28,7 @@ class LLMClient:
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
-    async def generate(self, prompt: str) -> dict:
-        """Generate a response from the LLM. Returns the full response."""
+    async def generate(self, prompt: str) -> LLMResponse:
         try:
             async with httpx.AsyncClient(timeout=self._settings.timeout_seconds) as client:
                 response = await client.post(
@@ -46,13 +46,13 @@ class LLMClient:
                 response.raise_for_status()
 
             data = response.json()
-            return {
-                "text": data.get("response", ""),
-                "model": data.get("model"),
-                "total_duration_ms": round(data.get("total_duration", 0) / 1_000_000, 2),
-                "prompt_tokens": data.get("prompt_eval_count", 0),
-                "completion_tokens": data.get("eval_count", 0),
-            }
+            return LLMResponse(
+                text=data.get("response", ""),
+                model=data.get("model"),
+                total_duration_ms=round(data.get("total_duration", 0) / 1_000_000, 2),
+                prompt_tokens=data.get("prompt_eval_count", 0),
+                completion_tokens=data.get("eval_count", 0),
+            )
 
         except httpx.ConnectError as e:
             raise ExternalServiceError("Ollama", f"Cannot connect: {e}")
@@ -64,7 +64,6 @@ class LLMClient:
             )
 
     async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
-        """Stream generated text token by token."""
         import json
 
         try:
@@ -93,3 +92,9 @@ class LLMClient:
             raise ExternalServiceError("Ollama", f"Cannot connect: {e}")
         except httpx.TimeoutException as e:
             raise ExternalServiceError("Ollama", f"Stream timed out: {e}")
+        except httpx.HTTPStatusError as e:
+            raise ExternalServiceError(
+                "Ollama", f"HTTP {e.response.status_code}: {e.response.text}"
+            )
+        except (json.JSONDecodeError, KeyError) as e:
+            raise ExternalServiceError("Ollama", f"Malformed stream response: {e}")

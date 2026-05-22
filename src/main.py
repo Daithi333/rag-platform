@@ -85,6 +85,7 @@ async def app_error_handler(request: Request, exc: AppError):
         ErrorCode.NOT_FOUND: 404,
         ErrorCode.CONFLICT: 409,
         ErrorCode.VALIDATION_ERROR: 422,
+        ErrorCode.EXTERNAL_SERVICE_ERROR: 502,
     }
     status_code = app_error_status_map.get(exc.code, 500)
     response = ErrorResponse(error=exc.code, message=exc.message, details=exc.details)

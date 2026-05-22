@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from src.db.base import BaseDatabase
 from src.schemas.api.health import HealthResponse, ServiceStatus
 from src.services.embeddings.client import EmbeddingClient
-from src.services.llm.client import LLMClient
+from src.services.llm.base import BaseLLMClient
 from src.services.opensearch.client import OpenSearchClient
 
 logger = structlog.getLogger(__name__)
@@ -16,7 +16,7 @@ async def get_health(
     database: BaseDatabase,
     opensearch: OpenSearchClient,
     embedding_client: EmbeddingClient,
-    llm_client: LLMClient,
+    llm_client: BaseLLMClient,
     version: str,
     environment: str,
     service_name: str,
@@ -73,8 +73,9 @@ def _check_embedding_client(client: EmbeddingClient) -> ServiceStatus:
     return ServiceStatus(status="degraded", message="API key not configured")
 
 
-async def _check_llm(client: LLMClient) -> ServiceStatus:
+async def _check_llm(client: BaseLLMClient) -> ServiceStatus:
     result = await client.health_check()
     if result["status"] == "healthy":
-        return ServiceStatus(status="healthy", message=f"version: {result.get('version')}")
+        detail = result.get("version") or result.get("provider") or "connected"
+        return ServiceStatus(status="healthy", message=detail)
     return ServiceStatus(status="unhealthy", message=result.get("error", "unreachable"))

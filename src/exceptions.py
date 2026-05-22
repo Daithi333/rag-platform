@@ -14,7 +14,7 @@ class ErrorCode(StrEnum):
 class AppError(Exception):
     """Base for all application errors."""
 
-    def __init__(self, message: str, code: ErrorCode, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, code: ErrorCode, details: dict[str, Any] = None):
         self.message = message
         self.code = code
         self.details = details or {}
@@ -31,12 +31,12 @@ class NotFoundError(AppError):
 
 
 class ConflictError(AppError):
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, details: dict[str, Any] = None):
         super().__init__(message=message, code=ErrorCode.CONFLICT, details=details)
 
 
 class ValidationError(AppError):
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, details: dict[str, Any] = None):
         super().__init__(message=message, code=ErrorCode.CONFLICT, details=details)
 
 

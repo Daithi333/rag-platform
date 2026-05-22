@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.config import OpenSearchSettings
+from src.exceptions import ExternalServiceError
 from src.services.opensearch.client import OpenSearchClient
 
 
@@ -206,10 +207,11 @@ class TestSearch:
         call_kwargs = client._mock.search.call_args[1]
         assert call_kwargs["params"]["search_pipeline"] == "my-pipeline"
 
-    def test_error_returns_empty(self, client):
+    def test_error_raises_external_service_error(self, client):
         client._mock.search.side_effect = Exception("search error")
 
-        result = client.search("test-idx", {"query": {}})
+        with pytest.raises(ExternalServiceError) as exc_info:
+            client.search("test-idx", {"query": {}})
 
-        assert result["total"] == 0
-        assert result["hits"] == []
+        assert "OpenSearch" in exc_info.value.message
+        assert "search error" in exc_info.value.message
