@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.db.base import BaseDatabase
 from src.schemas.api.health import HealthResponse, ServiceStatus
+from src.services.cache.client import CacheClient
 from src.services.embeddings.client import EmbeddingClient
 from src.services.llm.base import BaseLLMClient
 from src.services.opensearch.client import OpenSearchClient
@@ -17,6 +18,7 @@ async def get_health(
     opensearch: OpenSearchClient,
     embedding_client: EmbeddingClient,
     llm_client: BaseLLMClient,
+    cache: CacheClient | None,
     version: str,
     environment: str,
     service_name: str,
@@ -30,6 +32,8 @@ async def get_health(
     services["opensearch"] = _check_opensearch(opensearch)
     services["embeddings"] = _check_embedding_client(embedding_client)
     services["llm"] = await _check_llm(llm_client)
+    services["cache"] = _check_cache(cache)
+    services["tracing"] = _check_tracing()
 
     any_unhealthy = any(s.status == "unhealthy" for s in services.values())
     any_degraded = any(s.status == "degraded" for s in services.values())
@@ -79,3 +83,21 @@ async def _check_llm(client: BaseLLMClient) -> ServiceStatus:
         detail = result.get("version") or result.get("provider") or "connected"
         return ServiceStatus(status="healthy", message=detail)
     return ServiceStatus(status="unhealthy", message=result.get("error", "unreachable"))
+
+
+def _check_cache(client: CacheClient | None) -> ServiceStatus:
+    if client is None:
+        return ServiceStatus(status="degraded", message="not configured")
+    try:
+        client._redis.ping()
+        return ServiceStatus(status="healthy", message="connected")
+    except Exception as e:
+        return ServiceStatus(status="degraded", message=str(e))
+
+
+def _check_tracing() -> ServiceStatus:
+    from src.services.tracing import tracer
+
+    if tracer.enabled:
+        return ServiceStatus(status="healthy", message="enabled")
+    return ServiceStatus(status="degraded", message="disabled")

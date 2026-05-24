@@ -6,10 +6,12 @@ help:
 	@echo "Infrastructure:"
 	@echo "  make up               - start core (API + Postgres + OpenSearch)"
 	@echo "  make up-airflow       - start core + Airflow stack"
-	@echo "  make up-rag           - start core + Gradio UI (hosted LLM via env)"
-	@echo "  make up-rag-local     - start core + Gradio UI + Ollama (local inference)"
+	@echo "  make up-rag           - start core + Gradio UI + Redis (hosted LLM via env)"
+	@echo "  make up-rag-local     - start core + Gradio UI + Redis + Ollama (local inference)"
+	@echo "  make up-observability - start core + Langfuse stack (tracing dashboard)"
 	@echo "  make up-dashboards    - start core + OpenSearch Dashboards"
 	@echo "  make down             - stop stack"
+	@echo "  make down-volumes     - stop stack and remove volumes"
 	@echo "  make build            - rebuild images"
 	@echo "  make ps               - show containers"
 	@echo "  make logs             - tail logs"
@@ -45,8 +47,14 @@ up-rag-local:
 up-dashboards:
 	docker compose --profile dashboards up -d
 
+up-observability:
+	docker compose --profile observability up -d
+
 down:
-	docker compose --profile rag --profile rag-local --profile airflow --profile dashboards down
+	docker compose --profile rag --profile rag-local --profile airflow --profile dashboards --profile observability down
+
+down-volumes:
+	docker compose --profile rag --profile rag-local --profile airflow --profile dashboards --profile observability down -v
 
 build:
 	docker compose build --no-cache

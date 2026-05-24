@@ -4,10 +4,11 @@ import structlog
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.dependencies import EmbeddingDep, LLMDep, OpenSearchDep, SettingsDep
+from src.dependencies import CacheDep, EmbeddingDep, LLMDep, OpenSearchDep, SettingsDep
 from src.exceptions import AppError
 from src.schemas.api.rag import AskRequest, AskResponse
 from src.services.rag import RAGService
+from src.services.tracing import tracer
 
 logger = structlog.getLogger(__name__)
 
@@ -35,16 +36,28 @@ async def ask(
     opensearch: OpenSearchDep,
     embedding_client: EmbeddingDep,
     llm_client: LLMDep,
+    cache: CacheDep,
 ) -> AskResponse:
     """Ask a question and get a RAG-generated answer with sources."""
+    if cache:
+        cached = await cache.get(request)
+        if cached:
+            return cached
+
     service = _make_rag_service(opensearch, embedding_client, llm_client, settings)
 
-    return await service.ask(
-        question=request.question,
-        mode=request.mode,
-        num_chunks=request.num_chunks,
-        tags=request.tags,
-    )
+    async with tracer.start_trace("rag_ask", metadata={"question": request.question}):
+        response = await service.ask(
+            question=request.question,
+            mode=request.mode,
+            num_chunks=request.num_chunks,
+            tags=request.tags,
+        )
+
+    if cache:
+        await cache.set(request, response)
+
+    return response
 
 
 @router.post("/ask/stream", tags=["RAG"])
@@ -54,6 +67,7 @@ async def ask_stream(
     opensearch: OpenSearchDep,
     embedding_client: EmbeddingDep,
     llm_client: LLMDep,
+    cache: CacheDep,
 ):
     """Stream a RAG answer using Server-Sent Events.
 
@@ -66,38 +80,75 @@ async def ask_stream(
 
     async def generate_sse():
         try:
-            context, token_stream = await service.ask_stream(
-                question=request.question,
-                mode=request.mode,
-                num_chunks=request.num_chunks,
-                tags=request.tags,
-            )
+            if cache:
+                cached = await cache.get(request)
+                if cached:
+                    yield _sse_event(
+                        {
+                            "sources": [s.model_dump() for s in cached.sources],
+                            "chunks_used": cached.chunks_used,
+                        }
+                    )
+                    yield _sse_event({"chunk": cached.answer})
+                    yield _sse_event({"done": True})
+                    return
 
-            if context is None:
+            async with tracer.start_trace(
+                "rag_ask_stream", metadata={"question": request.question}
+            ):
+                context, token_stream = await service.ask_stream(
+                    question=request.question,
+                    mode=request.mode,
+                    num_chunks=request.num_chunks,
+                    tags=request.tags,
+                )
+
+                if context is None:
+                    yield _sse_event(
+                        {
+                            "answer": "I couldn't find any relevant articles to answer your question.",
+                            "sources": [],
+                            "chunks_used": 0,
+                            "done": True,
+                        }
+                    )
+                    return
+
                 yield _sse_event(
                     {
-                        "answer": "I couldn't find any relevant articles to answer your question.",
-                        "sources": [],
-                        "chunks_used": 0,
-                        "done": True,
+                        "sources": [s.model_dump() for s in context.sources],
+                        "chunks_used": context.chunks_used,
                     }
                 )
-                return
 
-            # Send metadata first so the UI can render sources immediately
-            yield _sse_event(
-                {
-                    "sources": [s.model_dump() for s in context.sources],
-                    "chunks_used": context.chunks_used,
-                }
-            )
+                full_answer = ""
+                async for token in token_stream:
+                    full_answer += token
+                    yield _sse_event({"chunk": token})
 
-            # Stream LLM tokens
-            async for token in token_stream:
-                yield _sse_event({"chunk": token})
+                yield _sse_event({"done": True})
 
-            # Signal completion
-            yield _sse_event({"done": True})
+            # Report generation to Langfuse after stream completes
+            if tracer.enabled and token_stream:
+                with tracer._client.start_as_current_observation(
+                    as_type="generation",
+                    name="llm_generate_stream",
+                    input=request.question,
+                ) as gen:
+                    gen.update(
+                        output=full_answer,
+                        model=token_stream.model,
+                        usage_details=token_stream.usage,
+                    )
+
+            if cache and full_answer:
+                response = AskResponse(
+                    question=request.question,
+                    answer=full_answer,
+                    sources=context.sources,
+                    chunks_used=context.chunks_used,
+                )
+                await cache.set(request, response)
 
         except AppError as e:
             logger.error("Stream error", error=e.message, code=e.code)

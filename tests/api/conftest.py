@@ -1,4 +1,9 @@
 import logging
+import os
+
+os.environ["LANGFUSE__ENABLED"] = "false"
+os.environ["REDIS__HOST"] = ""
+
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock
 
@@ -7,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from src.config import Settings
 from src.dependencies import (
+    get_cache,
     get_database,
     get_embedding_client,
     get_llm_client,
@@ -63,11 +69,16 @@ def _mock_llm_factory():
     return client
 
 
+def _mock_cache_factory():
+    return None
+
+
 app.router.lifespan_context = create_lifespan(
     database_factory=_mock_database_factory,
     opensearch_factory=_mock_opensearch_factory,
     embedding_factory=_mock_embedding_factory,
     llm_factory=_mock_llm_factory,
+    cache_factory=_mock_cache_factory,
 )
 
 
@@ -123,6 +134,7 @@ def client(mock_settings, mock_database, mock_opensearch, mock_embedding_client,
     app.dependency_overrides[get_opensearch] = lambda: mock_opensearch
     app.dependency_overrides[get_embedding_client] = lambda: mock_embedding_client
     app.dependency_overrides[get_llm_client] = lambda: mock_llm_client
+    app.dependency_overrides[get_cache] = _mock_cache_factory
 
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client

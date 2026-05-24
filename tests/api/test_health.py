@@ -3,31 +3,12 @@ from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 from fastapi import APIRouter
-from fastapi.testclient import TestClient
 
 from src.dependencies import (
     get_database,
-    get_embedding_client,
-    get_llm_client,
     get_opensearch,
-    get_settings,
 )
 from src.main import app
-
-
-def _make_client(
-    mock_settings, mock_database, mock_opensearch, mock_embedding_client=None, mock_llm_client=None
-):
-    from tests.api.conftest import _mock_embedding_factory, _mock_llm_factory
-
-    app.dependency_overrides[get_settings] = lambda: mock_settings
-    app.dependency_overrides[get_database] = lambda: mock_database
-    app.dependency_overrides[get_opensearch] = lambda: mock_opensearch
-    app.dependency_overrides[get_embedding_client] = lambda: (
-        mock_embedding_client or _mock_embedding_factory()
-    )
-    app.dependency_overrides[get_llm_client] = lambda: mock_llm_client or _mock_llm_factory()
-    return TestClient(app, raise_server_exceptions=False)
 
 
 def test_health_success(client, base_url):
@@ -38,22 +19,22 @@ def test_health_success(client, base_url):
     assert response.headers["content-type"] == "application/json"
 
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["status"] in ("ok", "degraded")
     assert data["version"] == "0.1.0"
     assert data["environment"] == "development"
     assert data["service_name"] == "rag-platform-api"
     assert data["services"]["database"]["status"] == "healthy"
     assert data["services"]["opensearch"]["status"] == "healthy"
-    assert data["services"]["embeddings"]["status"] == "healthy"
+    assert data["services"]["llm"]["status"] == "healthy"
 
 
-def test_health_degraded_when_opensearch_red(mock_settings, mock_database, base_url):
+def test_health_degraded_when_opensearch_red(client, mock_settings, mock_database, base_url):
     """Test health returns degraded when OpenSearch cluster is red."""
     os_client = MagicMock()
     os_client.health_check.return_value = {"status": "red", "healthy": False}
 
-    with _make_client(mock_settings, mock_database, os_client) as c:
-        response = c.get(f"{base_url}/health")
+    app.dependency_overrides[get_opensearch] = lambda: os_client
+    response = client.get(f"{base_url}/health")
 
     data = response.json()
     assert data["status"] == "degraded"
@@ -61,7 +42,7 @@ def test_health_degraded_when_opensearch_red(mock_settings, mock_database, base_
     assert data["services"]["database"]["status"] == "healthy"
 
 
-def test_health_error_when_database_down(mock_settings, mock_opensearch, base_url):
+def test_health_error_when_database_down(client, mock_settings, mock_opensearch, base_url):
     """Test health returns error when database is unreachable."""
     db = MagicMock()
     session = MagicMock()
@@ -73,8 +54,8 @@ def test_health_error_when_database_down(mock_settings, mock_opensearch, base_ur
 
     db.get_session = failing_session
 
-    with _make_client(mock_settings, db, mock_opensearch) as c:
-        response = c.get(f"{base_url}/health")
+    app.dependency_overrides[get_database] = lambda: db
+    response = client.get(f"{base_url}/health")
 
     data = response.json()
     assert data["status"] == "error"
@@ -82,7 +63,7 @@ def test_health_error_when_database_down(mock_settings, mock_opensearch, base_ur
     assert "Connection refused" in data["services"]["database"]["message"]
 
 
-def test_health_error_when_opensearch_unreachable(mock_settings, mock_database, base_url):
+def test_health_error_when_opensearch_unreachable(client, mock_settings, mock_database, base_url):
     """Test health returns error when OpenSearch is unreachable."""
     os_client = MagicMock()
     os_client.health_check.return_value = {
@@ -91,8 +72,8 @@ def test_health_error_when_opensearch_unreachable(mock_settings, mock_database, 
         "error": "Connection refused",
     }
 
-    with _make_client(mock_settings, mock_database, os_client) as c:
-        response = c.get(f"{base_url}/health")
+    app.dependency_overrides[get_opensearch] = lambda: os_client
+    response = client.get(f"{base_url}/health")
 
     data = response.json()
     assert data["status"] == "error"

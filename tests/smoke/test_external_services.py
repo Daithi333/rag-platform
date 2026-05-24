@@ -53,8 +53,27 @@ async def test_llm_generate():
 async def test_llm_generate_stream():
     """Stream tokens from the configured LLM provider."""
     client = make_llm_client()
+    stream = await client.generate_stream("Reply with exactly: hello")
     tokens = []
-    async for token in client.generate_stream("Reply with exactly: hello"):
+    async for token in stream:
         tokens.append(token)
     assert len(tokens) > 0
     assert all(isinstance(t, str) for t in tokens)
+
+
+def test_langfuse_auth():
+    """Verify Langfuse credentials are valid (requires running Langfuse instance)."""
+    from langfuse import Langfuse
+
+    from src.config import get_settings
+
+    settings = get_settings()
+    if not settings.langfuse.enabled:
+        pytest.skip("Langfuse not enabled")
+
+    client = Langfuse(
+        public_key=settings.langfuse.public_key,
+        secret_key=settings.langfuse.secret_key,
+        host=settings.langfuse.host,
+    )
+    assert client.auth_check(), "Langfuse auth check failed — verify keys and host"

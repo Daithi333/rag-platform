@@ -8,7 +8,8 @@ import structlog
 from src.config import OllamaSettings
 from src.exceptions import ExternalServiceError
 
-from .base import BaseLLMClient, LLMResponse
+from .base import BaseLLMClient, LLMResponse, StreamResponse
+from src.services.tracing import tracer
 
 logger = structlog.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class OllamaLLMClient(BaseLLMClient):
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
+    @tracer.generation("llm_generate")
     async def generate(self, prompt: str) -> LLMResponse:
         try:
             async with httpx.AsyncClient(timeout=self._settings.timeout_seconds) as client:
@@ -63,7 +65,13 @@ class OllamaLLMClient(BaseLLMClient):
                 "Ollama", f"HTTP {e.response.status_code}: {e.response.text}"
             )
 
-    async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
+    async def generate_stream(self, prompt: str) -> StreamResponse:
+        return StreamResponse(
+            iterator=self._stream_tokens(prompt),
+            model=self._settings.model,
+        )
+
+    async def _stream_tokens(self, prompt: str) -> AsyncIterator[str]:
         import json
 
         try:

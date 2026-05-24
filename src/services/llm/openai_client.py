@@ -8,8 +8,9 @@ import structlog
 
 from src.config import OpenAISettings
 from src.exceptions import ExternalServiceError
+from src.services.tracing import tracer
 
-from .base import BaseLLMClient, LLMResponse
+from .base import BaseLLMClient, LLMResponse, StreamResponse
 
 logger = structlog.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class OpenAILLMClient(BaseLLMClient):
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
+    @tracer.generation("llm_generate")
     async def generate(self, prompt: str) -> LLMResponse:
         payload = {
             "model": self._settings.model,
@@ -78,7 +80,17 @@ class OpenAILLMClient(BaseLLMClient):
                 "OpenAI-compatible", f"HTTP {e.response.status_code}: {e.response.text}"
             )
 
-    async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
+    async def generate_stream(self, prompt: str) -> StreamResponse:
+        usage_holder: dict[str, int | None] = {"usage": None}
+        stream = StreamResponse(
+            iterator=self._stream_tokens(prompt, usage_holder),
+            model=self._settings.model,
+        )
+        stream._usage_holder = usage_holder
+        return stream
+
+    async def _stream_tokens(self, prompt: str, usage_holder: dict) -> AsyncIterator[str]:
+        """Internal generator that yields tokens and captures usage from the final chunk."""
         import json
 
         payload = {
@@ -88,6 +100,7 @@ class OpenAILLMClient(BaseLLMClient):
             "top_p": self._settings.top_p,
             "max_tokens": self._settings.max_tokens,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
         try:
@@ -106,10 +119,21 @@ class OpenAILLMClient(BaseLLMClient):
                         if data_str.strip() == "[DONE]":
                             break
                         chunk = json.loads(data_str)
-                        delta = chunk["choices"][0].get("delta", {})
-                        content = delta.get("content")
-                        if content:
-                            yield content
+
+                        # OpenAI sends usage in the final chunk when include_usage=true
+                        usage = chunk.get("usage")
+                        if usage:
+                            usage_holder["usage"] = {
+                                "input": usage.get("prompt_tokens", 0),
+                                "output": usage.get("completion_tokens", 0),
+                            }
+
+                        choices = chunk.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content")
+                            if content:
+                                yield content
 
         except httpx.ConnectError as e:
             raise ExternalServiceError("OpenAI-compatible", f"Cannot connect: {e}")

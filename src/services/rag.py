@@ -1,6 +1,5 @@
 """RAG service: search -> build context -> generate answer."""
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 import structlog
@@ -9,10 +8,12 @@ from src.config import OpenSearchSettings
 from src.schemas.api.rag import AskResponse, Source
 from src.schemas.api.search import ChunkHit, SearchMode
 from src.services.embeddings.client import EmbeddingClient
-from src.services.llm.base import BaseLLMClient
+from src.services.llm.base import BaseLLMClient, StreamResponse
 from src.services.llm.prompts import build_rag_prompt
 from src.services.opensearch.client import OpenSearchClient
 from src.services.search import SearchService
+
+from src.services.tracing import tracer
 
 logger = structlog.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class RAGService:
         )
         self._llm = llm_client
 
+    @tracer.span("retrieve")
     async def _retrieve(
         self,
         question: str,
@@ -103,22 +105,20 @@ class RAGService:
         mode: SearchMode = SearchMode.HYBRID,
         num_chunks: int = 5,
         tags: list[str] | None = None,
-    ) -> tuple[RAGContext | None, AsyncIterator[str] | None]:
+    ) -> tuple[RAGContext | None, StreamResponse | None]:
         """Retrieve context and return metadata + a token stream.
 
-        Returns a tuple of (context, token_iterator). If context is None,
-        no results were found and the iterator will be None.
+        Returns a tuple of (context, stream). If context is None,
+        no results were found and the stream will be None.
+        After iterating the stream, stream.usage contains token counts.
         """
         context = await self._retrieve(question, mode, num_chunks, tags)
 
         if context is None:
             return None, None
 
-        async def _stream() -> AsyncIterator[str]:
-            async for token in self._llm.generate_stream(context.prompt):
-                yield token
-
-        return context, _stream()
+        stream = await self._llm.generate_stream(context.prompt)
+        return context, stream
 
 
 def _extract_sources(chunks: list[ChunkHit]) -> list[Source]:

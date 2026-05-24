@@ -5,6 +5,7 @@ from fastapi import Depends, Request
 
 from src.config import Settings
 from src.db.base import BaseDatabase
+from src.services.cache.client import CacheClient
 from src.services.embeddings.client import EmbeddingClient
 from src.services.llm.base import BaseLLMClient
 from src.services.opensearch.client import OpenSearchClient
@@ -36,9 +37,15 @@ def get_llm_client(request: Request) -> BaseLLMClient:
     return request.app.state.llm_client
 
 
+def get_cache(request: Request) -> CacheClient | None:
+    """Get cache client from app state. May be None if Redis is unavailable."""
+    return getattr(request.app.state, "cache", None)
+
+
 # Dependency annotations
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
 OpenSearchDep = Annotated[OpenSearchClient, Depends(get_opensearch)]
 EmbeddingDep = Annotated[EmbeddingClient, Depends(get_embedding_client)]
 LLMDep = Annotated[BaseLLMClient, Depends(get_llm_client)]
+CacheDep = Annotated[CacheClient | None, Depends(get_cache)]

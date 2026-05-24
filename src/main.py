@@ -20,7 +20,9 @@ from src.routers import health, rag, search
 from src.schemas.api.errors import ErrorResponse
 from src.services.embeddings.factory import make_embedding_client
 from src.services.llm.factory import make_llm_client
+from src.services.cache.factory import make_cache_client
 from src.services.opensearch.factory import make_opensearch_client
+from src.services.tracing import tracer
 
 setup_logging()
 logger = structlog.getLogger(__name__)
@@ -31,6 +33,7 @@ def create_lifespan(
     opensearch_factory: Callable = make_opensearch_client,
     embedding_factory: Callable = make_embedding_client,
     llm_factory: Callable = make_llm_client,
+    cache_factory: Callable | None = None,
 ):
     """Create a lifespan with injectable service factories."""
 
@@ -47,12 +50,20 @@ def create_lifespan(
         app.state.embedding_client = embedding_factory()
         app.state.llm_client = llm_factory()
 
+        tracer.configure(settings.langfuse)
+
+        if cache_factory:
+            app.state.cache = cache_factory()
+        else:
+            app.state.cache = make_cache_client(settings.redis)
+
         logger.info("Services initialised", opensearch_host=settings.opensearch.host)
 
         yield
 
         database.teardown()
         opensearch.close()
+        tracer.shutdown()
         logger.info("Services shut down")
 
     return lifespan

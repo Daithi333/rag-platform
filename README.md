@@ -2,86 +2,106 @@
 
 A production-ready Retrieval-Augmented Generation (RAG) platform for ingesting, indexing, and querying technical content from multiple sources using hybrid search (BM25 + vector embeddings).
 
-## Planned Features
+## Features
 
-- **Multi-source ingestion**: Dev.to articles, Stack Overflow Q&A, GitHub discussions
-- **Hybrid search**: Combines BM25 keyword search with semantic vector embeddings
-- **Airflow orchestration**: Scheduled daily ingestion pipelines with retry logic
-- **OpenSearch indexing**: Scalable full-text and vector search with RRF ranking
-- **FastAPI backend**: Modern async Python API with dependency injection
-- **Structured logging**: Request tracing and observability with structlog
-- **Production patterns**: Exception handling, testing, CI/CD ready
+- **Multi-source ingestion**: Dev.to articles (Stack Overflow, GitHub discussions planned)
+- **Hybrid search**: BM25 keyword search + semantic vector embeddings with RRF ranking
+- **RAG pipeline**: Streaming answers via SSE with configurable LLM provider (OpenAI, Groq, Ollama)
+- **Observability**: Langfuse tracing with automatic span hierarchy and cost tracking
+- **Caching**: Redis exact-match cache to avoid duplicate LLM calls
+- **Airflow orchestration**: Scheduled daily ingestion with retry logic
+- **Gradio UI**: Search and RAG tabs with real-time streaming
+- **Production patterns**: Structured logging, exception handling, graceful degradation, CI/CD
 
-## Docker
+## Quick Start
 
 ```bash
-docker compose up                                        # start stack
-docker compose --profile dashboards up                   # start stack with OpenSearch Dashboards (localhost:5601)
-docker compose exec api pytest tests/unit tests/api tests/integration -v  # run all CI tests
-docker compose exec api pytest tests/unit -v             # run unit tests
-docker compose exec api pytest tests/api -v              # run api tests
-docker compose exec api pytest tests/integration -v      # run integration tests (requires test database)
-docker compose exec api pytest tests/smoke -v            # run smoke tests (requires external service connectivity)
-docker compose logs airflow-webserver | grep -i password # obtain Airflow admin password after 1st time init
-docker compose down                                      # stop and remove containers
+cp .env.example .env          # configure API keys
+make build                    # build images (first time or after dependency changes)
+make up-rag                   # start core + Gradio UI + Redis
 ```
+
+## Make Targets
+
+| Command | What it starts |
+|---|---|
+| `make up` | Core: API + Postgres + OpenSearch |
+| `make up-rag` | Core + Gradio UI + Redis |
+| `make up-rag-local` | Core + Gradio UI + Redis + Ollama |
+| `make up-observability` | Core + Langfuse stack |
+| `make up-airflow` | Core + Airflow |
+| `make up-dashboards` | Core + OpenSearch Dashboards |
+| `make down` | Stop all containers |
+| `make down-volumes` | Stop all + delete volumes |
+| `make test` | Run all tests (unit + api + integration) |
+| `make test-smoke` | Run smoke tests (requires external services) |
+| `make lint` | Run ruff linter |
+| `make format` | Format code |
+
+## Configuration
+
+All configuration is via `.env`. See `.env.example` for all options.
+
+**LLM Provider** (required for RAG):
+
+```bash
+LLM_PROVIDER=openai           # openai | groq | ollama
+OPENAI__API_KEY=sk-...
+```
+
+**Langfuse** (optional, for tracing):
+
+```bash
+LANGFUSE__ENABLED=true
+LANGFUSE__PUBLIC_KEY=pk-lf-rag-platform-dev
+LANGFUSE__SECRET_KEY=sk-lf-rag-platform-dev
+```
+
+Keys are pre-seeded when using `make up-observability`. Dashboard at `localhost:3001` (admin@example.com / admin123).
 
 ## Architecture
 
-### Ingestion Pipeline (Airflow)
+### Ingestion (Airflow)
 
-Articles are fetched daily from the Dev.to API, upserted into PostgreSQL with content-hash-based change detection, then chunked and indexed into OpenSearch. Only new or updated articles are indexed on each run.
-
-The daily DAG flow:
+Articles fetched from Dev.to API, upserted into PostgreSQL, chunked and indexed into OpenSearch. Only new/updated articles are processed.
 
 ```
 setup_environment --> fetch_and_store_articles --+--> index_articles --> generate_daily_report
                  \--> setup_opensearch_index ----+
 ```
 
-A separate manual backfill DAG allows indexing existing articles by date range.
-
 ### Search (OpenSearch)
 
-Articles are split into ~600-word overlapping chunks and indexed into OpenSearch for full-text (BM25) and vector search. Hybrid search combines both using Reciprocal Rank Fusion (RRF).
+Articles split into ~600-word overlapping chunks indexed for BM25 and vector search. Hybrid search combines both via Reciprocal Rank Fusion (RRF).
 
-See [docs/opensearch.md](docs/opensearch.md) for detailed configuration and mapping documentation.
-
-### API (FastAPI)
-
-Health endpoint checks liveness of PostgreSQL and OpenSearch. Services are initialised via a lifespan and injected into routes via FastAPI dependencies.
-
-### Ollama
-
-```bash
-docker compose exec ollama ollama pull llama3.2:3b    # Download llama3.2:3b model
-```
+See [docs/opensearch.md](docs/opensearch.md) for index configuration.
 
 ### RAG
-
-The RAG endpoint retrieves relevant article chunks via hybrid search, then generates an answer using the configured LLM provider.
-
-Set the provider in `.env`:
-
-```bash
-LLM_PROVIDER=openai          # openai | groq | ollama
-OPENAI__API_KEY=sk-...        # required for openai provider
-GROQ__API_KEY=gsk_...         # required for groq provider
-```
-
-Example request:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "What are the best practices for error handling in Python?", "tags": ["python"], "num_chunks": 5}'
+  -d '{"question": "What are the best practices for error handling in Python?", "tags": ["python"]}'
 ```
+
+Streaming endpoint (`/api/v1/ask/stream`) uses Server-Sent Events for real-time token delivery.
+
+### Graceful Degradation
+
+| Component | Missing | Behaviour |
+|---|---|---|
+| Postgres | App won't start | Required |
+| OpenSearch | Search/RAG returns 502 | Required |
+| LLM provider | RAG returns 502, search still works | Required for RAG |
+| Jina embeddings | Hybrid/vector search unavailable, BM25 works | Optional |
+| Redis | No caching, every request hits LLM | Optional |
+| Langfuse | No tracing, decorators no-op | Optional |
+| Gradio | No UI, API works via curl | Optional |
 
 ## Future Enhancements
 
-- A/B testing of search configurations (BM25 vs hybrid, field boost tuning) using DeepEval with pytest integration
-- API rate limiting with slowapi + Redis backend
-- Alembic database migrations with init container
-- Weekly "deep refresh" DAG with higher `max_pages` to catch edits to older articles that the daily ingestion (capped at 50 pages per tag) would miss
+- A/B testing of search configurations using DeepEval
+- API rate limiting with slowapi
+- Alembic database migrations
 - Additional data sources: Stack Overflow Q&A, GitHub discussions
-- Langfuse tracing and Redis caching for production monitoring and performance
+- React frontend

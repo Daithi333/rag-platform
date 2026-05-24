@@ -182,6 +182,40 @@ class GroqSettings(OpenAISettings):
     model: str = "llama-3.1-8b-instant"
 
 
+class LangfuseSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="LANGFUSE__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    enabled: bool = False
+    public_key: str = ""
+    secret_key: str = ""
+    host: str = "http://localhost:3001"
+    flush_at: int = 15
+    flush_interval: float = 1.0
+    debug: bool = False
+
+
+class RedisSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="REDIS__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    host: str = "localhost"
+    port: int = 6379
+    password: str = ""
+    db: int = 0
+    ttl_seconds: int = 600
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -204,6 +238,8 @@ class Settings(BaseConfigSettings):
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     openai: OpenAISettings = Field(default_factory=OpenAISettings)
     groq: GroqSettings = Field(default_factory=GroqSettings)
+    langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
 
 
 def get_settings() -> Settings:
