@@ -2,8 +2,26 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 from pydantic import BaseModel
+
+
+@dataclass
+class LLMUsage:
+    """Token usage metadata from an LLM call."""
+
+    model: str | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_duration_ms: float | None = None
+
+    @property
+    def usage_details(self) -> dict[str, int] | None:
+        """Formatted for Langfuse. Returns None if no token data available."""
+        if self.prompt_tokens or self.completion_tokens:
+            return {"input": self.prompt_tokens, "output": self.completion_tokens}
+        return None
 
 
 class LLMResponse(BaseModel):
@@ -15,6 +33,15 @@ class LLMResponse(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
 
+    @property
+    def usage(self) -> LLMUsage:
+        return LLMUsage(
+            model=self.model,
+            prompt_tokens=self.prompt_tokens,
+            completion_tokens=self.completion_tokens,
+            total_duration_ms=self.total_duration_ms,
+        )
+
 
 class StreamResponse:
     """Async iterator over tokens that also captures usage metadata after completion.
@@ -23,22 +50,25 @@ class StreamResponse:
         stream = await client.generate_stream(prompt)
         async for token in stream:
             print(token)
-        # After iteration, usage is available:
-        print(stream.usage)  # {"input": 850, "output": 120}
-        print(stream.model)  # "gpt-4o-mini"
+        # After iteration:
+        print(stream.usage.model)           # "gpt-4o-mini"
+        print(stream.usage.usage_details)   # {"input": 850, "output": 120}
     """
 
     def __init__(self, iterator: AsyncIterator[str], model: str | None = None):
         self._iterator = iterator
-        self.model = model
+        self._usage = LLMUsage(model=model)
         self._usage_holder: dict | None = None
 
     @property
-    def usage(self) -> dict[str, int] | None:
+    def usage(self) -> LLMUsage:
         """Available after iteration completes."""
         if self._usage_holder:
-            return self._usage_holder.get("usage")
-        return None
+            raw = self._usage_holder.get("usage")
+            if raw:
+                self._usage.prompt_tokens = raw.get("input", 0)
+                self._usage.completion_tokens = raw.get("output", 0)
+        return self._usage
 
     def __aiter__(self):
         return self

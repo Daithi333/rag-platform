@@ -1,7 +1,9 @@
 """Smoke tests for external services. Require real API connectivity."""
 
 import pytest
+from langfuse import Langfuse
 
+from src.config import get_settings
 from src.services.devto.factory import make_devto_client
 from src.services.embeddings.factory import make_embedding_client
 from src.services.llm.base import LLMResponse
@@ -63,10 +65,6 @@ async def test_llm_generate_stream():
 
 def test_langfuse_auth():
     """Verify Langfuse credentials are valid (requires running Langfuse instance)."""
-    from langfuse import Langfuse
-
-    from src.config import get_settings
-
     settings = get_settings()
     if not settings.langfuse.enabled:
         pytest.skip("Langfuse not enabled")

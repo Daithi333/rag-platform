@@ -1,5 +1,11 @@
 """API tests for the RAG endpoint."""
 
+from unittest.mock import AsyncMock, MagicMock
+
+from src.dependencies import get_cache
+from src.main import app
+from src.schemas.api.rag import AskResponse, Source
+
 MOCK_SEARCH_HITS = {
     "total": 2,
     "hits": [
@@ -102,3 +108,31 @@ def test_ask_includes_model_info(client, mock_opensearch, base_url):
     data = response.json()
     assert data["model"] == "test-model"
     assert data["duration_ms"] == 100.0
+
+
+def test_ask_cache_hit_skips_llm(client, mock_opensearch, mock_llm_client, base_url):
+    """Test that a cache hit returns without calling the LLM."""
+    cached_response = AskResponse(
+        question="cached question",
+        answer="cached answer",
+        sources=[Source(title="Cached Article", url="https://example.com", author="Author")],
+        chunks_used=3,
+        model="cached-model",
+    )
+
+    mock_cache = MagicMock()
+    mock_cache.get = AsyncMock(return_value=cached_response)
+    mock_cache.set = AsyncMock()
+    app.dependency_overrides[get_cache] = lambda: mock_cache
+
+    response = client.post(
+        f"{base_url}/ask",
+        json={"question": "cached question"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["answer"] == "cached answer"
+    assert data["model"] == "cached-model"
+    mock_llm_client.generate.assert_not_called()
+    mock_opensearch.search.assert_not_called()

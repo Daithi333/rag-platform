@@ -24,6 +24,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
+from langfuse import Langfuse
 import structlog
 
 from src.config import LangfuseSettings
@@ -48,8 +49,6 @@ class Tracer:
             return
 
         try:
-            from langfuse import Langfuse
-
             self._client = Langfuse(
                 public_key=settings.public_key,
                 secret_key=settings.secret_key,

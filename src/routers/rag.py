@@ -135,11 +135,13 @@ async def ask_stream(
                     name="llm_generate_stream",
                     input=request.question,
                 ) as gen:
-                    gen.update(
-                        output=full_answer,
-                        model=token_stream.model,
-                        usage_details=token_stream.usage,
-                    )
+                    update_kwargs = {
+                        "output": full_answer,
+                        "model": token_stream.usage.model,
+                    }
+                    if token_stream.usage.usage_details:
+                        update_kwargs["usage_details"] = token_stream.usage.usage_details
+                    gen.update(**update_kwargs)
 
             if cache and full_answer:
                 response = AskResponse(
