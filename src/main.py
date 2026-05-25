@@ -17,6 +17,7 @@ from src.exceptions import AppError, ErrorCode
 from src.logs import setup_logging
 from src.middlewares import RequestLoggingMiddleware
 from src.routers import health, rag, search
+from src.routers import agent as agent_router
 from src.schemas.api.errors import ErrorResponse
 from src.services.embeddings.factory import make_embedding_client
 from src.services.llm.factory import make_llm_client
@@ -79,6 +80,7 @@ app = FastAPI(
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(rag.router, prefix="/api/v1")
+app.include_router(agent_router.router, prefix="/api/v1")
 
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(

@@ -193,6 +193,91 @@ def _format_streaming_answer(answer: str, sources: list, chunks_used: int) -> st
     return "\n".join(lines)
 
 
+async def ask_agent(question: str):
+    """Call the agentic RAG API via SSE, streaming reasoning steps progressively."""
+    import json
+
+    if not question.strip():
+        yield "Please enter a question."
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            async with client.stream(
+                "POST",
+                f"{API_BASE}/ask/agent/stream",
+                json={"question": question},
+                headers={"Accept": "text/event-stream"},
+            ) as response:
+                if response.status_code != 200:
+                    yield f"**Error:** {response.status_code}"
+                    return
+
+                reasoning_lines = []
+                answer = ""
+
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = json.loads(line[6:])
+
+                    if "error" in data:
+                        yield f"**Error:** {data['error']}"
+                        return
+
+                    if "step" in data:
+                        reasoning_lines.append(f"- {data['step']}")
+                        yield _format_agent_progress(reasoning_lines, answer)
+
+                    if "answer" in data:
+                        answer = data["answer"]
+
+                    if data.get("done"):
+                        sources = data.get("sources", [])
+                        yield _format_agent_final(reasoning_lines, answer, sources, data)
+                        return
+
+                yield _format_agent_progress(reasoning_lines, answer or "No response received.")
+
+    except httpx.ConnectError:
+        yield f"**Error:** Could not connect to API at {API_BASE}"
+    except httpx.TimeoutException:
+        yield "**Error:** Request timed out."
+
+
+def _format_agent_progress(reasoning_lines: list, answer: str) -> str:
+    """Format in-progress output: reasoning steps + partial answer."""
+    parts = ["**Agent Reasoning:**\n"]
+    parts.extend(reasoning_lines)
+    if answer:
+        parts.append(f"\n\n---\n\n{answer}")
+    else:
+        parts.append("\n\n*Thinking...*")
+    return "\n".join(parts)
+
+
+def _format_agent_final(reasoning_lines: list, answer: str, sources: list, data: dict) -> str:
+    """Format the completed output: reasoning + answer + sources."""
+    parts = ["**Agent Reasoning:**\n"]
+    parts.extend(reasoning_lines)
+    parts.append(f"\n\n---\n\n{answer}")
+
+    if sources:
+        parts.append(f"\n\n---\n**Sources** ({data.get('chunks_used', 0)} chunks used):\n")
+        for i, source in enumerate(sources, 1):
+            title = source.get("title", "Untitled")
+            url = source.get("url", "")
+            author = source.get("author", "")
+            author_str = f" by {author}" if author else ""
+            parts.append(f"{i}. [{title}]({url}){author_str}")
+
+    model = data.get("model")
+    if model:
+        parts.append(f"\n*Model: {model}*")
+
+    return "\n".join(parts)
+
+
 def build_app() -> gr.Blocks:
     """Build the Gradio interface."""
     with gr.Blocks(title="RAG Platform - Search") as app:
@@ -277,6 +362,28 @@ def build_app() -> gr.Blocks:
                     fn=ask_question,
                     inputs=[question_input, rag_mode_input, rag_tags_input, num_chunks_input],
                     outputs=answer_output,
+                )
+
+            with gr.TabItem("Agentic RAG"):
+                agent_question_input = gr.Textbox(
+                    label="Question",
+                    placeholder="e.g. How should I structure error handling in a FastAPI application?",
+                    lines=2,
+                )
+
+                agent_ask_btn = gr.Button("Ask Agent", variant="primary")
+                agent_output = gr.Markdown(label="Response")
+
+                agent_ask_btn.click(
+                    fn=ask_agent,
+                    inputs=[agent_question_input],
+                    outputs=agent_output,
+                )
+
+                agent_question_input.submit(
+                    fn=ask_agent,
+                    inputs=[agent_question_input],
+                    outputs=agent_output,
                 )
 
     return app

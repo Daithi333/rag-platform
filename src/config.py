@@ -182,6 +182,21 @@ class GroqSettings(OpenAISettings):
     model: str = "llama-3.1-8b-instant"
 
 
+class AgentSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="AGENT__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    max_rewrites: int = 2
+    min_relevant_chunks: int = 1
+    skip_guardrail: bool = False
+    skip_grading: bool = False
+
+
 class LangfuseSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -240,6 +255,7 @@ class Settings(BaseConfigSettings):
     groq: GroqSettings = Field(default_factory=GroqSettings)
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    agent: AgentSettings = Field(default_factory=AgentSettings)
 
 
 def get_settings() -> Settings:
