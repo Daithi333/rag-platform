@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: help up down build ps logs topic-create produce bronze
+.PHONY: help up up-airflow up-rag up-rag-local up-observability up-dashboards down down-volumes build ps logs test test-unit test-api test-integration test-smoke lint format format-check typecheck pre-commit-install pre-commit-run
 
 help:
 	@echo "Infrastructure:"

@@ -37,7 +37,7 @@ class ConflictError(AppError):
 
 class ValidationError(AppError):
     def __init__(self, message: str, details: dict[str, Any] = None):
-        super().__init__(message=message, code=ErrorCode.CONFLICT, details=details)
+        super().__init__(message=message, code=ErrorCode.VALIDATION_ERROR, details=details)
 
 
 class ExternalServiceError(AppError):

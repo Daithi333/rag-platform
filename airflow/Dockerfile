@@ -12,8 +12,6 @@ RUN apt-get update && \
         curl \
         git \
         libpq-dev \
-        poppler-utils \
-        tesseract-ocr \
         && rm -rf /var/lib/apt/lists/*
 
 # Create airflow user with UID/GID 50000 for cross-platform compatibility
